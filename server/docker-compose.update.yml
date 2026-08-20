@@ -1,0 +1,38 @@
+# WinClaw 自动更新分发 —— 独立部署栈（nginx 8080 + 管理端 8091）
+# 单一命名卷 winclaw-update 同时给 nginx(:ro) 提供更新包、给 update-admin(:rw) 管理。
+#
+# 若已有 hs-rag compose（nginx 已在 8080 上），只需加 update-admin 一段、复用其 nginx，
+# 不要同时起本文件的 nginx（端口冲突）。本文件适合把更新分发独立成栈。
+#
+# 离线构建要求：服务器无法访问外网时，admin 构建零依赖（仅 COPY），
+# 根镜像 node:22-alpine / nginx:alpine 需已在本地镜像缓存。
+
+services:
+  update-admin:
+    build:
+      context: ../admin
+    container_name: hsrag-update-admin
+    ports:
+      - "8091:8091"                       # 宿主机 8081 若被占用勿用；统一 8091
+    volumes:
+      - winclaw-update:/data/winclaw-update:rw
+    environment:
+      - WINCLAW_UPDATE_BASE_URL=http://10.233.129.67:8080/update   # 写进清单的 url 前缀（.67）
+      - WINCLAW_UPDATE_DIR=/data/winclaw-update
+      - WINCLAW_ADMIN_PORT=8091
+      # 如需鉴权：设置非空 token（前端在控制台 localStorage.setItem('admin_token','<token>')）
+      - WINCLAW_ADMIN_TOKEN=
+    restart: unless-stopped
+
+  nginx:
+    image: nginx:alpine
+    container_name: hsrag-update-nginx
+    ports:
+      - "8080:80"
+    volumes:
+      - ./nginx.conf:/etc/nginx/conf.d/default.conf:ro
+      - winclaw-update:/data/winclaw-update:ro
+    restart: unless-stopped
+
+volumes:
+  winclaw-update:

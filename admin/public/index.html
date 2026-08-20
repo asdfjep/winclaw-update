@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>WinClaw 更新管理</title>
+<link rel="stylesheet" href="app.css">
+</head>
+<body>
+<header>
+  <div class="brand">
+    <h1>WinClaw 更新管理</h1>
+    <span class="sub" id="base-url">—</span>
+  </div>
+  <div class="header-actions">
+    <span id="active-badge" class="badge active hidden">已发布 v<span id="active-version"></span></span>
+    <button id="btn-refresh" title="刷新">刷新</button>
+  </div>
+</header>
+
+<main>
+  <section class="card upload-card">
+    <h2>上传发布包</h2>
+    <div id="drop-zone" class="drop-zone">
+      <p>拖拽 <code>.zip</code> 发布包或 <code>.exe</code> 安装包到这里，或</p>
+      <label class="btn" for="file-input">选择文件</label>
+      <input type="file" id="file-input" accept=".zip,.exe" hidden>
+      <p class="hint">zip 将自动解析出安装包与内嵌清单的版本/说明；单个 exe 需按 <code>Hs-WinClaw-Setup-&lt;版本&gt;.exe</code> 命名</p>
+    </div>
+    <div id="upload-progress" class="upload-progress hidden">
+      <div class="progress-bar"><div id="progress-fill" class="progress-fill"></div></div>
+      <div id="progress-text" class="hint">上传中…</div>
+    </div>
+    <div id="upload-error" class="error hidden"></div>
+  </section>
+
+  <section class="card">
+    <h2>发布列表 <span class="hint" id="list-count"></span></h2>
+    <table>
+      <thead>
+        <tr>
+          <th>版本</th>
+          <th class="num">大小</th>
+          <th>SHA256</th>
+          <th>上传时间</th>
+          <th>发布说明</th>
+          <th>操作</th>
+        </tr>
+      </thead>
+      <tbody id="release-rows">
+        <tr><td colspan="6" class="hint">加载中…</td></tr>
+      </tbody>
+    </table>
+    <div class="error hidden" id="list-error"></div>
+  </section>
+</main>
+
+<div id="modal-notes" class="modal hidden">
+  <div class="modal-box">
+    <h3>编辑发布说明 <span id="notes-version"></span></h3>
+    <textarea id="notes-text" rows="8" placeholder="该版本的更新说明，客户端更新弹窗会展示多条，每行一条"></textarea>
+    <label class="check">
+      <input type="checkbox" id="notes-mandatory">
+      <span>强制更新（mandatory）</span>
+    </label>
+    <div class="modal-actions">
+      <button class="ghost" data-close>取消</button>
+      <button id="notes-save" class="primary">保存</button>
+    </div>
+  </div>
+</div>
+
+<div id="modal-confirm" class="modal hidden">
+  <div class="modal-box">
+    <h3 id="confirm-title"></h3>
+    <p id="confirm-text"></p>
+    <div class="modal-actions">
+      <button class="ghost" data-close>取消</button>
+      <button id="confirm-ok" class="danger">确认</button>
+    </div>
+  </div>
+</div>
+
+<div id="toast" class="toast hidden"></div>
+
+<script src="app.js"></script>
+</body>
+</html>
