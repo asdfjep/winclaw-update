@@ -6,46 +6,89 @@
 > 本机是 **snap 安装的 Docker**：守护进程对宿主机路径的 bind mount 受限（`/opt`、`/var`、`/tmp`
 > 都只读），因此更新卷必须是**命名卷**。普通 Docker 主机可改用 `./winclaw-update` bind mount。
 
-## 一卷两挂
+## 架构（独立栈，本仓库 `server/`）
 
-| 容器 | 挂载 | 说明 |
-|------|------|------|
-| nginx（8080） | `winclaw-update:/data/winclaw-update:ro` | 只读供客户端拉取 |
-| update-admin（8091） | `winclaw-update:/data/winclaw-update:rw` | 读写管理 |
+| 容器 | 端口 | 挂载/网络 | 职责 |
+|------|------|-----------|------|
+| `hsrag-update-nginx` | 8080 | 卷 `server_winclaw-update:/data/winclaw-update:ro`；nginx.conf bind mount；外部网络 `hs-rag_default` | `/update/` 静态分发 + 其余路径代理到 hs-rag（知识库 Web 登录/API） |
+| `hsrag-update-admin` | 8091 | 卷 `server_winclaw-update:/data/winclaw-update:rw` | 上传/设为发布/删除/回滚 |
+
+**8080 唯一入口**：`/update/` 走静态卷；`/api/`、`/_next/` 及其余路径按服务名
+`backend:5000` / `frontend:3000` 代理进 hs-rag 的 compose 网络。
+因此**起本栈前必须停掉 hs-rag 的 `hsrag-nginx`**（它原来占着 8080），否则端口冲突。
 
 **发布 = 管理端把该版本清单原子写进卷根的 `winclaw-update.json`**，nginx 对外路径不变（`/update/`）。
 回滚 = 重新发布旧版本。
 
+> 卷名注意：snap-Docker 下命名卷带 compose 项目前缀。本栈项目名 = `server`
+> （compose 文件所在目录名），卷实际叫 **`server_winclaw-update`**；
+> 旧 hs-rag 项目的卷叫 `hs-rag_winclaw-update`。两卷数据不互通，迁移见下。
+
+## 从 /opt/hs-rag 现状迁移到独立栈
+
+> ⚠️ 数据在哪：现网 `hsrag-update-admin` 实测**没挂任何卷**，1.5.7/1.5.8 安装包在
+> 它自己的容器可写层里；旧卷 `hs-rag_winclaw-update` 可能是空的。
+> 所以必须**先 docker cp 把数据导出来，再删旧容器**，顺序不能反！
+
+```bash
+# 0) 拿仓库（GitLab 地址按实际填）
+git clone http://10.233.129.65:8800/<group>/winclaw-update.git /opt/winclaw-update
+
+# 1) 确认 hs-rag 网络名（compose 里 external network 要一致）
+docker network ls | grep hs-rag        # 预期 hs-rag_default；不同就改 docker-compose.update.yml
+
+# 2) 先把旧 admin 容器层里的数据导进新卷（这一步自动创建 server_winclaw-update 卷）
+docker run -d --rm --name upd-migrate -v server_winclaw-update:/dst alpine sleep 3600
+docker cp hsrag-update-admin:/data/winclaw-update/. upd-migrate:/dst/
+# 若旧卷 hs-rag_winclaw-update 里也有数据（docker volume inspect 看下大小/内容），一并合并：
+#   docker run --rm -v hs-rag_winclaw-update:/src:ro -v server_winclaw-update:/dst alpine cp -a /src/. /dst/
+docker exec upd-migrate ls -l /dst     # 确认有 Hs-WinClaw-Setup-1.5.8.exe + winclaw-update.json
+docker rm -f upd-migrate
+
+# 3) 停旧容器（让出 8080/8091；数据已导出，可放心删）
+docker rm -f hsrag-nginx hsrag-update-admin
+
+# 4) 起独立栈（首次 --build 构建 admin 镜像；nginx 用本地缓存的 nginx:alpine）
+cd /opt/winclaw-update/server
+docker compose -f docker-compose.update.yml up -d --build
+
+# 5) 验证
+curl -i http://127.0.0.1:8080/update/winclaw-update.json   # 200 + Cache-Control: no-cache，body 以 {"version": 开头
+curl -s  http://127.0.0.1:8080/api/knowledge-bases | head -c 200   # hs-rag 的 JSON/401，不能是 nginx 404 或 HTML
+curl -s  http://127.0.0.1:8091/healthz                     # ok
+curl -s  http://127.0.0.1:8091/api/releases | head -c 300  # 应列出 1.5.8/1.5.7，active=1.5.8
+```
+
+旧卷 `hs-rag_winclaw-update` 先留着当备份，独立栈跑稳后再 `docker volume rm` 清理。
+`/opt/hs-rag` 的 compose 里仍留有 nginx/update-admin 的服务定义，**不要再在那里 `up` 这两个服务**
+（会抢 8080/8091）；想干净就编辑掉对应段落。
+
 ## 常用操作
 
 ```bash
-# 查更新卷真实名字（snap 下 compose 命名卷带 hs-rag_ 前缀，易错！）
-docker inspect hsrag-nginx --format '{{range .Mounts}}{{if eq .Destination "/data/winclaw-update"}}{{.Name}}{{end}}{{end}}'
-# 预期输出：hs-rag_winclaw-update（字面 winclaw-update 会挂到另一个空卷→nginx 404）
+# 查更新卷真实名字（别想当然写字面名）
+docker inspect hsrag-update-nginx --format '{{range .Mounts}}{{if eq .Destination "/data/winclaw-update"}}{{.Name}}{{end}}{{end}}'
 
 # 手工放文件进命名卷（shell 直写宿主机路径权限不够，用容器中转）
-VOL=$(docker inspect --format '{{range .Mounts}}{{if eq .Destination "/data/winclaw-update"}}{{.Name}}{{end}}{{end}}' hsrag-nginx)
+VOL=$(docker inspect --format '{{range .Mounts}}{{if eq .Destination "/data/winclaw-update"}}{{.Name}}{{end}}{{end}}' hsrag-update-nginx)
 docker run -d --rm --name upd-helper -v $VOL:/d alpine sleep 3600
 docker cp ~/Hs-WinClaw-Setup-x.y.z.exe upd-helper:/d/
 docker rm -f upd-helper
 
-# 重建 nginx（nginx.conf 在镜像里，必须 --build 才会带进新配置）
-docker compose up -d --build nginx
+# 改 nginx.conf：配置是 bind mount，重启即生效（不再需要 --build）
+docker compose -f docker-compose.update.yml restart nginx
+
+# 改 admin 代码/环境：需要重建镜像
+docker compose -f docker-compose.update.yml up -d --build update-admin
 ```
 
 ## 管理端（update-admin，8081 已被宿主 python 占用——**统一用 8091**）
 
 ```bash
-docker compose up -d --build update-admin
 curl -s http://127.0.0.1:8091/healthz       # ok
 curl -s http://127.0.0.1:8091/api/releases   # 列出版本 + active 标记
 curl -s 放行：sudo ufw allow 8091/tcp        # 若不放开，外网 8091 访问不通
 ```
-
-改端口/服务段后若要生效：compose 是 skip-worktree 的，`git pull` 不会更新它——
-要么 `sudo git update-index --no-skip-worktree docker-compose.yml && git checkout docker-compose.yml`
-采用仓库版，要么直接 `sudo sed -i 's/8081:8081/8091:8091/' docker-compose.yml` 就地改后
-`docker compose up -d --force-recreate update-admin`。
 
 ## 客户端更新流程
 
@@ -55,6 +98,9 @@ curl -s 放行：sudo ufw allow 8091/tcp        # 若不放开，外网 8091 访
 
 ## 易错点（历史踩坑）
 
+- **卷前缀**：字面 `winclaw-update` 会挂到一个空的新卷 → nginx 404。必须用 `docker volume ls` 看到的带前缀真名。
+- **8080 冲突**：独立栈 nginx 与 hs-rag 的 `hsrag-nginx` 只能活一个。
+- **网络名**：compose 里 `hsrag` external 网络写死 `hs-rag_default`，hs-rag 项目名变了要同步改。
 - 清单 `url`/客户端 `ManifestUrl` 曾误写 `10.233.129.65`（Git 服务器）→ 更新 404。源码已统一 `.67`。
 - 已内置 `.65` 的旧安装包：新版本覆盖升级，或手动改安装目录 `appsettings.json`。
 - 「发布包」必须标准 zip / 裸 exe，`Hs-WinClaw-Setup-*-update-package.zip` 不是 zip，上传会解析失败。

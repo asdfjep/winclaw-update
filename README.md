@@ -32,6 +32,8 @@ WinClaw 桌面智能体的**自动更新分发**，含客户端拉取、服务�
 
 ```bash
 # 1) 服务器上部署分发栈（snap-Docker：命名卷；普通 Docker 可改 bind mount）
+#    独立栈的 nginx 独占 8080（/update/ 静态 + 代理知识库流量），
+#    起栈前先停 hs-rag 的旧 nginx：docker rm -f hsrag-nginx
 docker compose -f server/docker-compose.update.yml up -d --build
 
 # 2) 打包（在 WinClaw 产品仓库）：
@@ -41,6 +43,8 @@ docker compose -f server/docker-compose.update.yml up -d --build
 # 3) 浏览器打开 http://10.233.129.67:8091
 #    拖拽 zip（或裸 exe）→「设为发布」→ 客户端 24h 内自动更新
 ```
+
+迁移旧卷数据、验证、回退等完整步骤见 [`server/DEPLOY.md`](server/DEPLOY.md)。
 
 ## 维护注意
 

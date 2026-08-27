@@ -1,8 +1,12 @@
 # WinClaw 自动更新分发 —— 独立部署栈（nginx 8080 + 管理端 8091）
 # 单一命名卷 winclaw-update 同时给 nginx(:ro) 提供更新包、给 update-admin(:rw) 管理。
+# 注意：snap-Docker 下命名卷带项目前缀！本项目名为 "server"，卷实际叫
+# server_winclaw-update；hs-rag 项目（/opt/hs-rag）的卷叫 hs-rag_winclaw-update。
+# 两个卷数据不互通——迁移数据用下方 DEPLOY.md 的 helper 容器跨卷 cp。
 #
-# 若已有 hs-rag compose（nginx 已在 8080 上），只需加 update-admin 一段、复用其 nginx，
-# 不要同时起本文件的 nginx（端口冲突）。本文件适合把更新分发独立成栈。
+# 本栈的 nginx 独占 8080，既提供 /update/ 静态文件，也把 /api/、/_next/ 等
+# 代理到 hs-rag 的 backend/frontend（经外部网络 hs-rag_default，见下）。
+# 因此起本栈前必须先停掉 hs-rag 的 nginx（hsrag-nginx），否则 8080 冲突。
 #
 # 离线构建要求：服务器无法访问外网时，admin 构建零依赖（仅 COPY），
 # 根镜像 node:22-alpine / nginx:alpine 需已在本地镜像缓存。
@@ -32,7 +36,18 @@ services:
     volumes:
       - ./nginx.conf:/etc/nginx/conf.d/default.conf:ro
       - winclaw-update:/data/winclaw-update:ro
+    # 加入 hs-rag 的 compose 网络，才能按服务名 backend/frontend 代理知识库流量
+    networks:
+      - default
+      - hsrag
     restart: unless-stopped
 
 volumes:
   winclaw-update:
+
+networks:
+  # hs-rag compose 项目（/opt/hs-rag）创建的默认网络；若其项目名不同，
+  # 用 `docker network ls | grep hs-rag` 确认后改这里。
+  hsrag:
+    external: true
+    name: hs-rag_default
