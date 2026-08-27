@@ -21,9 +21,9 @@
 **发布 = 管理端把该版本清单原子写进卷根的 `winclaw-update.json`**（清单 `url` 前缀 = `http://10.233.129.67:8091/update`）。
 回滚 = 重新发布旧版本。
 
-> 卷名注意：snap-Docker 下命名卷带 compose 项目前缀。本栈项目名 = `server`
-> （compose 文件所在目录名），卷实际叫 **`server_winclaw-update`**。
-> 旧的 `hs-rag_winclaw-update` 卷是历史遗留，数据已迁完，跑稳后可 `docker volume rm` 清理。
+> 卷名注意：compose 顶层已显式 `name: server_winclaw-update`（见 `docker-compose.update.yml`），
+> 无论从哪个目录起栈都能命中同一数据卷。旧 `hs-rag_winclaw-update` 卷是历史遗留，
+> 数据已迁完，跑稳后可 `docker volume rm` 清理。
 
 ## 部署 / 更新栈
 
@@ -73,7 +73,7 @@ curl -X POST http://127.0.0.1:8091/api/releases/x.y.z/publish
 
 ## 易错点（历史踩坑）
 
-- **卷前缀**：字面 `winclaw-update` 会挂到一个空的新卷 → nginx 404。必须用 `docker volume ls` 看到的带前缀真名。
+- **卷前缀**：字面 `winclaw-update` 会挂到一个空的新卷 → nginx 404。compose 顶层已 `name: server_winclaw-update` 固定，不要手动改名。旧 `hs-rag_winclaw-update` 只作迁移源。
 - **端口**：8080 = 知识库 hs-rag；8091 = 更新栈；8092 = 注册中心。三者互不相干，别混。
 - **离线环境**：服务器拉不到 Docker Hub。helper 容器统一 `node:22-alpine`；
   compose 构建只 COPY 不联网，前提是 `nginx:alpine`/`node:22-alpine` 已在本地镜像缓存。

@@ -36,5 +36,8 @@ services:
       - update-admin
     restart: unless-stopped
 
+# 顶层命名卷显式固定名字：复用已存在的 server_winclaw-update 数据卷
+#（snap-Docker 下不带 name 会因项目名前缀生成空卷 → nginx /update 404）。
 volumes:
   winclaw-update:
+    name: server_winclaw-update
