@@ -29,12 +29,13 @@ services:
     restart: unless-stopped
 
   nginx:
-    image: nginx:alpine
+    build:
+      context: .
+      dockerfile: Dockerfile.nginx
     container_name: hsrag-update-nginx
     ports:
       - "8080:80"
     volumes:
-      - ./nginx.conf:/etc/nginx/conf.d/default.conf:ro
       - winclaw-update:/data/winclaw-update:ro
     # 加入 hs-rag 的 compose 网络，才能按服务名 backend/frontend 代理知识库流量
     networks:

@@ -1,0 +1,4 @@
+# snap-Docker 不允许 bind mount 宿主机路径（/opt 只读），
+# 配置只能烤进镜像。改 nginx.conf 后：docker compose up -d --build nginx
+FROM nginx:alpine
+COPY nginx.conf /etc/nginx/conf.d/default.conf

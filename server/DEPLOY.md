@@ -10,7 +10,7 @@
 
 | 容器 | 端口 | 挂载/网络 | 职责 |
 |------|------|-----------|------|
-| `hsrag-update-nginx` | 8080 | 卷 `server_winclaw-update:/data/winclaw-update:ro`；nginx.conf bind mount；外部网络 `hs-rag_default` | `/update/` 静态分发 + 其余路径代理到 hs-rag（知识库 Web 登录/API） |
+| `hsrag-update-nginx` | 8080 | 卷 `server_winclaw-update:/data/winclaw-update:ro`；nginx.conf 烤进镜像（Dockerfile.nginx）；外部网络 `hs-rag_default` | `/update/` 静态分发 + 其余路径代理到 hs-rag（知识库 Web 登录/API） |
 | `hsrag-update-admin` | 8091 | 卷 `server_winclaw-update:/data/winclaw-update:rw` | 上传/设为发布/删除/回滚 |
 
 **8080 唯一入口**：`/update/` 走静态卷；`/api/`、`/_next/` 及其余路径按服务名
@@ -75,8 +75,8 @@ docker run -d --rm --name upd-helper -v $VOL:/d alpine sleep 3600
 docker cp ~/Hs-WinClaw-Setup-x.y.z.exe upd-helper:/d/
 docker rm -f upd-helper
 
-# 改 nginx.conf：配置是 bind mount，重启即生效（不再需要 --build）
-docker compose -f docker-compose.update.yml restart nginx
+# 改 nginx.conf：snap-Docker 不能 bind mount，配置烤进镜像，改完必须重建
+docker compose -f docker-compose.update.yml up -d --build nginx
 
 # 改 admin 代码/环境：需要重建镜像
 docker compose -f docker-compose.update.yml up -d --build update-admin
