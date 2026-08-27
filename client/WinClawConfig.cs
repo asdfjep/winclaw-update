@@ -43,7 +43,7 @@ public class UpdateConfig
     /// URL of the update manifest (winclaw-update.json), served by the
     /// internal update server (hs-rag-cloud Nginx static path).
     /// </summary>
-    public string ManifestUrl { get; set; } = "http://10.233.129.67:8080/update/winclaw-update.json";
+    public string ManifestUrl { get; set; } = "http://10.233.129.67:8091/update/winclaw-update.json";
 
     /// <summary>How often to re-check for updates while the app is running.</summary>
     public int CheckIntervalHours { get; set; } = 24;

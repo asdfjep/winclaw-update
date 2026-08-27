@@ -15,7 +15,7 @@ const crypto = require('crypto');
 const zlib = require('zlib');
 
 const DIR = process.env.WINCLAW_UPDATE_DIR || '/data/winclaw-update';
-const BASE_URL = (process.env.WINCLAW_UPDATE_BASE_URL || 'http://10.233.129.67:8080/update').replace(/\/+$/, '');
+const BASE_URL = (process.env.WINCLAW_UPDATE_BASE_URL || 'http://10.233.129.67:8091/update').replace(/\/+$/, '');
 const PORT = Number(process.env.WINCLAW_ADMIN_PORT || 8091);
 const ADMIN_TOKEN = process.env.WINCLAW_ADMIN_TOKEN || ''; // 空 = 不鉴权；设置后所有写操作要求 Bearer token
 const PUB_DIR = path.join(__dirname, 'public');

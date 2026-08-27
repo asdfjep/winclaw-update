@@ -1,14 +1,13 @@
 # WinClaw 自动更新体系
 
 WinClaw 桌面智能体的**自动更新分发**，含客户端拉取、服务器分发、Web 管理端、打包规范四部分。
-内网部署：服务器 `10.233.129.67`，分发端口 8080、管理端 8091。
+与知识库（hs-rag，8080）**完全解耦**。内网部署：服务器 `10.233.129.67`，对外唯一端口 **8091**。
 
 ```
-[客户端 WinClaw] --每24h拉-->  [nginx :8080 /update/] --ro-- [命名卷 winclaw-update]
-                                        ^                      |
-                                        +--------------------+ 发布=写 winclaw-update.json
-                                        [update-admin :8091] --rw--
-                                            (上传/选定发布/删除/回滚)
+[客户端 WinClaw] --每24h拉-->  [nginx :8091]
+                                ├─ /update/ --ro-- [命名卷 winclaw-update]
+                                └─ /（UI + /api）--> [update-admin 容器内 :8091] --rw-- 同一命名卷
+                                                        (上传/选定发布/删除/回滚)
 ```
 
 ## 组成
@@ -16,7 +15,7 @@ WinClaw 桌面智能体的**自动更新分发**，含客户端拉取、服务�
 | 目录 | 内容 |
 |------|------|
 | `admin/` | 更新管理端：零依赖 Node 服务（`http`/`fs`/`crypto`/`zlib`，无 package.json）+ 原生单页前端 |
-| `server/` | 服务器部署：独立 compose、nginx 配置、部署运维文档 |
+| `server/` | 服务器部署：独立 compose、nginx 配置（烤进镜像）、部署运维文档 |
 | `client/` | 客户端侧参考：更新服务代码、构建/清单脚本（`build_installer.bat`、`gen_update_manifest.ps1`） |
 | `spec/` | **发布包打包规范**（唯一权威）+ 内置技能 `release-package-skill` |
 
@@ -31,9 +30,7 @@ WinClaw 桌面智能体的**自动更新分发**，含客户端拉取、服务�
 ## 快速开始
 
 ```bash
-# 1) 服务器上部署分发栈（snap-Docker：命名卷；普通 Docker 可改 bind mount）
-#    独立栈的 nginx 独占 8080（/update/ 静态 + 代理知识库流量），
-#    起栈前先停 hs-rag 的旧 nginx：docker rm -f hsrag-nginx
+# 1) 服务器上部署分发栈（snap-Docker：命名卷 + 配置烤进镜像）
 docker compose -f server/docker-compose.update.yml up -d --build
 
 # 2) 打包（在 WinClaw 产品仓库）：
@@ -44,7 +41,7 @@ docker compose -f server/docker-compose.update.yml up -d --build
 #    拖拽 zip（或裸 exe）→「设为发布」→ 客户端 24h 内自动更新
 ```
 
-迁移旧卷数据、验证、回退等完整步骤见 [`server/DEPLOY.md`](server/DEPLOY.md)。
+部署、验证、易错点见 [`server/DEPLOY.md`](server/DEPLOY.md)。
 
 ## 维护注意
 

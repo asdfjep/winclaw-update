@@ -23,7 +23,7 @@ tools_required: file_read, file_write, powershell, cmd_execute
    管理端上传会「zip 解析失败」。zip 必须是标准 zip（首 4 字节 `50 4B 03 04`），内放 exe + winclaw-update.json。
 
 4. **清单字段**：`{ version, url, sha256, notes, mandatory, publishedAt }`
-   - `url` 前缀**必须** = `http://10.233.129.67:8080/update`（`.67`，更新服务器；`.65` 是 Git 服务器，禁止混用）。
+   - `url` 前缀**必须** = `http://10.233.129.67:8091/update`（`.67`，更新服务器；`.65` 是 Git 服务器，禁止混用）。
    - `sha256` = 对应 exe 的小写 SHA-256，客户端校验用；按 `build_installer.bat` 调 `tools/gen_update_manifest.ps1` 自动生成
      （自动算哈希、写 url、git 日志做 notes），不要手写。
 
@@ -40,7 +40,7 @@ tools_required: file_read, file_write, powershell, cmd_execute
 
 7. **发布前自检**：exe 文件名规范 / zip 是标准 zip / 清单 version 与 exe 一致 / url 是 `.67` /
    sha256 与 exe 一致（`certutil -hashfile <exe> SHA256` 核对）/ 上传后
-   `curl http://10.233.129.67:8080/update/winclaw-update.json` 返回新版本号。
+   `curl http://10.233.129.67:8091/update/winclaw-update.json` 返回新版本号。
 
 8. **别把测试/半成品留在当前发布位置**：测完用正式版本重发布。
 

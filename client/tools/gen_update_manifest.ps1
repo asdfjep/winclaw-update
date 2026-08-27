@@ -10,7 +10,7 @@
 param(
     [Parameter(Mandatory = $true)][string]$RepoRoot,
     [Parameter(Mandatory = $true)][string]$Version,
-    [string]$BaseUrl = "http://10.233.129.67:8080/update"
+    [string]$BaseUrl = "http://10.233.129.67:8091/update"
 )
 
 $ErrorActionPreference = "Stop"

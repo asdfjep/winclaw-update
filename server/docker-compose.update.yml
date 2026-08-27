@@ -1,12 +1,8 @@
-# WinClaw 自动更新分发 —— 独立部署栈（nginx 8080 + 管理端 8091）
+# WinClaw 自动更新分发 —— 独立部署栈（与知识库 hs-rag 完全解耦）
+# 对外唯一端口 8091：/update/ 静态分发更新包；/ 代理到管理端（前端+API 同址）。
 # 单一命名卷 winclaw-update 同时给 nginx(:ro) 提供更新包、给 update-admin(:rw) 管理。
 # 注意：snap-Docker 下命名卷带项目前缀！本项目名为 "server"，卷实际叫
-# server_winclaw-update；hs-rag 项目（/opt/hs-rag）的卷叫 hs-rag_winclaw-update。
-# 两个卷数据不互通——迁移数据用下方 DEPLOY.md 的 helper 容器跨卷 cp。
-#
-# 本栈的 nginx 独占 8080，既提供 /update/ 静态文件，也把 /api/、/_next/ 等
-# 代理到 hs-rag 的 backend/frontend（经外部网络 hs-rag_default，见下）。
-# 因此起本栈前必须先停掉 hs-rag 的 nginx（hsrag-nginx），否则 8080 冲突。
+# server_winclaw-update；旧 hs-rag 项目的卷叫 hs-rag_winclaw-update，数据不互通。
 #
 # 离线构建要求：服务器无法访问外网时，admin 构建零依赖（仅 COPY），
 # 根镜像 node:22-alpine / nginx:alpine 需已在本地镜像缓存。
@@ -16,12 +12,11 @@ services:
     build:
       context: ../admin
     container_name: hsrag-update-admin
-    ports:
-      - "8091:8091"                       # 宿主机 8081 若被占用勿用；统一 8091
+    # 不对外暴露端口：管理端 UI/API 统一经 nginx 8091 代理
     volumes:
       - winclaw-update:/data/winclaw-update:rw
     environment:
-      - WINCLAW_UPDATE_BASE_URL=http://10.233.129.67:8080/update   # 写进清单的 url 前缀（.67）
+      - WINCLAW_UPDATE_BASE_URL=http://10.233.129.67:8091/update   # 写进清单的 url 前缀（8091）
       - WINCLAW_UPDATE_DIR=/data/winclaw-update
       - WINCLAW_ADMIN_PORT=8091
       # 如需鉴权：设置非空 token（前端在控制台 localStorage.setItem('admin_token','<token>')）
@@ -34,21 +29,12 @@ services:
       dockerfile: Dockerfile.nginx
     container_name: hsrag-update-nginx
     ports:
-      - "8080:80"
+      - "8091:80"
     volumes:
       - winclaw-update:/data/winclaw-update:ro
-    # 加入 hs-rag 的 compose 网络，才能按服务名 backend/frontend 代理知识库流量
-    networks:
-      - default
-      - hsrag
+    depends_on:
+      - update-admin
     restart: unless-stopped
 
 volumes:
   winclaw-update:
-
-networks:
-  # hs-rag compose 项目（/opt/hs-rag）创建的默认网络；若其项目名不同，
-  # 用 `docker network ls | grep hs-rag` 确认后改这里。
-  hsrag:
-    external: true
-    name: hs-rag_default
