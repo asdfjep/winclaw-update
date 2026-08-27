@@ -438,6 +438,19 @@ const server = http.createServer(async (req, res) => {
       return handleDelete(res, url);
     }
 
+    // 更新包静态文件分发：/update/* 直接从更新目录返回（供客户端 + 管理端历史上传文件）
+    if (req.method === 'GET' && p.startsWith('/update/')) {
+      const rel = p.slice('/update/'.length);
+      const file = path.normalize(path.join(DIR, rel));
+      if (!file.startsWith(DIR)) return sendText(res, 403, 'Forbidden', 'text/plain; charset=utf-8');
+      if (fs.existsSync(file) && fs.statSync(file).isFile()) {
+        const ext = path.extname(file).toLowerCase();
+        res.writeHead(200, { 'Content-Type': (ext === '.json' ? 'application/json; charset=utf-8' : 'application/octet-stream'), 'Cache-Control': 'no-cache' });
+        return fs.createReadStream(file).pipe(res);
+      }
+      return sendText(res, 404, 'Not Found', 'text/plain; charset=utf-8');
+    }
+
     if (req.method === 'GET' && (p === '/' || !p.startsWith('/api/'))) return serveStatic(req, res, p);
 
     sendJson(res, 404, { error: `未找到 ${req.method} ${p}` });
