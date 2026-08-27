@@ -41,7 +41,7 @@ public class UpdateConfig
 
     /// <summary>
     /// URL of the update manifest (winclaw-update.json), served by the
-    /// internal update server (hs-rag-cloud Nginx static path).
+    /// internal update-server (winclaw-update admin, port 8091).
     /// </summary>
     public string ManifestUrl { get; set; } = "http://10.233.129.67:8091/update/winclaw-update.json";
 
@@ -406,7 +406,7 @@ public class KnowledgeBaseConfig
     /// </summary>
     public string RagSource { get; set; } = "cloud";
 
-    /// <summary>Cloud hs-rag base URL.</summary>
+    /// <summary>Cloud hs-rag base URL (知识库独立部署在 8080)。</summary>
     public string CloudBaseUrl { get; set; } = "http://10.233.129.67:8080";
 
     /// <summary>
