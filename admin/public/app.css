@@ -61,6 +61,8 @@ main { max-width: 1100px; margin: 20px auto; padding: 0 18px; display: flex; fle
   transition: border-color .15s, background .15s;
 }
 .drop-zone.dragover { border-color: var(--accent); background: #eff6ff; }
+.drop-zone.compact { padding: 16px 14px; margin-bottom: 12px; }
+.drop-zone.compact p { margin: 6px 0; }
 .drop-zone code, .hint code { background: var(--panel-2); padding: 0 4px; border-radius: 4px; font-size: 12px; }
 .drop-zone .hint { margin-bottom: 0; }
 .hint { color: var(--muted); font-size: 12px; }

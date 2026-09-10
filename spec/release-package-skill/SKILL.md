@@ -36,6 +36,7 @@ tools_required: file_read, file_write, powershell, cmd_execute
    打包后自检首 4 字节是否为 `PK\x03\x04`。
 
 6. **发布（管理端 `http://10.233.129.67:8091`）**：
+   - 也可单独把 `runtime-python-<stamp>.zip` 拖到管理端「环境包仓库」，不必和安装包打在一起。
    - 上传标准 zip 后，服务端**自动分流**环境包到共享 `/runtimes/`，安装包只保留内容。
    - 「设为发布」→ 原子写带 `runtimes` 的 `winclaw-update.json`。
    - 客户端更新只拉瘦 exe；登录时若环境缺失再下环境包。

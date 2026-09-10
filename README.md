@@ -25,6 +25,7 @@ WinClaw 桌面智能体的**自动更新分发**，含客户端拉取、服务�
   "选定发布" = 管理端把该版本清单原子写进卷根，客户端在下一检查周期拉取**内容更新**；
   `runtimes[]` 指向共享环境包（`/update/runtimes/runtime-python-<stamp>.zip`），登录时缺失才下载。
 - 上传发布包 zip 后管理端**自动分流**环境包到 `/runtimes/`（同 stamp 去重），安装包只保留程序内容。
+- 也可在管理端**单独上传** `runtime-python-<stamp>.zip`（`POST /api/runtimes`）；若已有发布版本，会立刻刷新清单里的 `runtimes[]`。
 - **回滚 = 重新发布旧版本**；当前发布版本受删除保护。
 - **离线可构建**：服务器无法访问外网（Docker Hub 超时），admin 仅用 Node 内建模块、
   根镜像（`node:22-alpine`/`nginx:alpine`）命中本地缓存，`compose build` 只 COPY 不联网。

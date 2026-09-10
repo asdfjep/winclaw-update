@@ -25,18 +25,29 @@
       <p>拖拽 <code>.zip</code> 发布包或 <code>.exe</code> 安装包到这里，或</p>
       <label class="btn" for="file-input">选择文件</label>
       <input type="file" id="file-input" accept=".zip,.exe" hidden>
-      <p class="hint">zip = 瘦安装包 + <code>winclaw-update.json</code> + <code>runtimes/runtime-python-&lt;stamp&gt;.zip</code>。上传后环境包自动分流到共享目录，更新包只保留内容。</p>
+      <p class="hint">zip = 瘦安装包 + <code>winclaw-update.json</code>，可选附带 <code>runtimes/</code>。也可把 <code>runtime-python-*.zip</code> 单独丢到这里或下方环境包区域。</p>
     </div>
     <div id="upload-progress" class="upload-progress hidden">
       <div class="progress-bar"><div id="progress-fill" class="progress-fill"></div></div>
       <div id="progress-text" class="hint">上传中…</div>
     </div>
     <div id="upload-error" class="error hidden"></div>
-    <div id="runtime-warning" class="error hidden">平台上还没有环境包。请上传带 <code>runtimes/</code> 的发布包，否则新安装客户端登录后无法下载 Python。</div>
+    <div id="runtime-warning" class="error hidden">平台上还没有环境包。请在下方单独上传 <code>runtime-python-*.zip</code>，否则新安装客户端登录后无法下载 Python。</div>
   </section>
 
   <section class="card">
     <h2>环境包仓库 <span class="hint" id="runtime-count"></span></h2>
+    <div id="runtime-drop-zone" class="drop-zone compact">
+      <p>单独上传环境包：拖拽 <code>runtime-python-&lt;stamp&gt;.zip</code>，或</p>
+      <label class="btn" for="runtime-file-input">选择环境包</label>
+      <input type="file" id="runtime-file-input" accept=".zip" hidden>
+      <p class="hint">不需要安装包。若已有发布版本，上传后会立刻写入清单 <code>runtimes[]</code>。</p>
+    </div>
+    <div id="runtime-upload-progress" class="upload-progress hidden">
+      <div class="progress-bar"><div id="runtime-progress-fill" class="progress-fill"></div></div>
+      <div id="runtime-progress-text" class="hint">上传中…</div>
+    </div>
+    <div id="runtime-upload-error" class="error hidden"></div>
     <table>
       <thead>
         <tr>

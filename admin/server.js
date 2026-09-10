@@ -361,6 +361,137 @@ function writeRuntimePack(file, data) {
   return { ...parsed, sha256, size: data.length, reused: false, overwritten };
 }
 
+function catalogRuntimes() {
+  return listRuntimeStore().map(ensureRuntimeSha).map((r) => ({
+    id: r.id,
+    stamp: r.stamp,
+    file: r.file,
+    url: `${BASE_URL}/runtimes/${r.file}`,
+    sha256: r.sha256,
+    size: r.size,
+  }));
+}
+
+function syncPublishedManifestRuntimes() {
+  const active = readActive();
+  if (!active || !active.version) return false;
+  active.runtimes = catalogRuntimes();
+  atomicWriteJson(path.join(DIR, 'winclaw-update.json'), active);
+  return true;
+}
+
+function offlineRelName(name) {
+  const n = posixName(name);
+  const marker = 'python-offline/';
+  const idx = n.toLowerCase().indexOf(marker);
+  return (idx >= 0 ? n.slice(idx + marker.length) : n).replace(/^\/+/, '');
+}
+
+function assertPythonRuntimePack(file, data) {
+  const parsed = parseRuntimeFileName(file);
+  if (!parsed || parsed.id !== 'python') return;
+  let entries;
+  try {
+    entries = zipEntries(data);
+  } catch (e) {
+    throw new Error(`环境包 ${file} 不是有效 zip：${e.message}`);
+  }
+  const names = entries.map((e) => offlineRelName(e.name)).filter((n) => n && !n.endsWith('/'));
+  if (!names.length) throw new Error(`环境包 ${file} 是空 zip`);
+  const hasStamp = names.includes('stamp');
+  const hasEmbed = names.some((n) => /^python-[\d.]+-embed-amd64\.zip$/i.test(path.posix.basename(n)));
+  if (!hasStamp || !hasEmbed) {
+    throw new Error(`Python 环境包内容不完整，需要 stamp 和 python-*-embed-amd64.zip（${file}）`);
+  }
+  const stampEntry = entries.find((e) => offlineRelName(e.name) === 'stamp');
+  if (!stampEntry) return;
+  const stamp = extractEntry(data, stampEntry).toString('utf8').trim();
+  if (stamp && stamp !== parsed.stamp) {
+    throw new Error(`环境包 stamp 不一致：文件名是 ${parsed.stamp}，包内 stamp 是 ${stamp}`);
+  }
+}
+
+function extractRuntimeUploads(filename, buf) {
+  const out = [];
+  const seen = new Set();
+  const pushPack = (file, data) => {
+    const parsed = parseRuntimeFileName(file);
+    if (!parsed || seen.has(parsed.file)) return;
+    assertPythonRuntimePack(parsed.file, data);
+    seen.add(parsed.file);
+    out.push({ file: parsed.file, data });
+  };
+
+  const direct = parseRuntimeFileName(filename);
+  if (direct) {
+    pushPack(direct.file, buf);
+    return out;
+  }
+
+  const entries = zipEntries(buf);
+  for (const e of entries) {
+    if (e.name.endsWith('/')) continue;
+    const base = path.posix.basename(posixName(e.name));
+    if (!parseRuntimeFileName(base)) continue;
+    pushPack(base, extractEntry(buf, e));
+  }
+
+  const offlineFiles = collectPythonOfflineFiles(buf, entries);
+  if (offlineFiles.length && !out.some((x) => parseRuntimeFileName(x.file).id === 'python')) {
+    const stampFile = offlineFiles.find((f) => posixName(f.name) === 'stamp');
+    const stamp = stampFile ? stampFile.data.toString('utf8').trim() : '3.12.10-1';
+    const file = `runtime-python-${stamp}.zip`;
+    pushPack(file, buildStoredZip(offlineFiles));
+  }
+
+  if (!out.length) {
+    throw new Error('未找到环境包。请上传 runtime-<id>-<stamp>.zip，或内含该文件 / python-offline/ 的 zip');
+  }
+  return out;
+}
+
+function ingestRuntimePacks(packs) {
+  const written = packs.map((p) => writeRuntimePack(p.file, p.data));
+  const published = syncPublishedManifestRuntimes();
+  return { written, published, runtimes: catalogRuntimes() };
+}
+
+function runtimeUploadResponse(result) {
+  return {
+    kind: 'runtime',
+    split: result.written.length,
+    published: result.published,
+    uploaded: result.written.map((r) => ({
+      id: r.id,
+      stamp: r.stamp,
+      file: r.file,
+      sha256: r.sha256,
+      size: r.size,
+      reused: !!r.reused,
+      overwritten: !!r.overwritten,
+      url: `${BASE_URL}/runtimes/${r.file}`,
+    })),
+    runtimes: result.runtimes,
+  };
+}
+
+async function handleRuntimeUpload(req, res, url) {
+  let filename = path.basename((url.searchParams.get('filename') || '').trim());
+  if (!filename) return sendJson(res, 400, { error: '缺少 filename 参数' });
+  if (!filename.toLowerCase().endsWith('.zip')) {
+    return sendJson(res, 400, { error: '环境包仅支持 .zip' });
+  }
+  const body = await readBody(req);
+  if (body.length === 0) return sendJson(res, 400, { error: '上传内容为空' });
+  let packs;
+  try {
+    packs = extractRuntimeUploads(filename, body);
+  } catch (e) {
+    return sendJson(res, 400, { error: e.message });
+  }
+  sendJson(res, 201, runtimeUploadResponse(ingestRuntimePacks(packs)));
+}
+
 // 发布包 zip 约定：Hs-WinClaw-Setup-<ver>.exe + winclaw-update.json
 // + 可选 runtimes/runtime-<id>-<stamp>.zip（或根目录同名）+ 可选 python-offline/ 目录。
 function extractReleaseZip(buf) {
@@ -430,6 +561,19 @@ async function handleUpload(req, res, url) {
   const body = await readBody(req);
   if (body.length === 0) return sendJson(res, 400, { error: '上传内容为空' });
 
+  const tryRuntimeOnly = () => {
+    const packs = extractRuntimeUploads(filename, body);
+    return sendJson(res, 201, runtimeUploadResponse(ingestRuntimePacks(packs)));
+  };
+
+  if (parseRuntimeFileName(filename)) {
+    try {
+      return tryRuntimeOnly();
+    } catch (e) {
+      return sendJson(res, 400, { error: e.message });
+    }
+  }
+
   let version, exeData, notes = '', mandatory = false, splitRuntimes = [];
 
   if (filename.toLowerCase().endsWith('.zip')) {
@@ -437,7 +581,11 @@ async function handleUpload(req, res, url) {
     try {
       extracted = extractReleaseZip(body);
     } catch (e) {
-      return sendJson(res, 400, { error: `zip 解析失败：${e.message}` });
+      try {
+        return tryRuntimeOnly();
+      } catch {
+        return sendJson(res, 400, { error: `zip 解析失败：${e.message}` });
+      }
     }
     version = extracted.version;
     exeData = extracted.data;
@@ -448,6 +596,7 @@ async function handleUpload(req, res, url) {
       if (!data) continue;
       splitRuntimes.push(writeRuntimePack(rt.file, data));
     }
+    if (splitRuntimes.length) syncPublishedManifestRuntimes();
   } else if (filename.toLowerCase().endsWith('.exe')) {
     version = versionFromFilename(filename);
     if (!version || !safeVersion(version)) {
@@ -512,15 +661,7 @@ async function handlePublish(res, url) {
   const meta = readMeta(version) || {};
   const notes = meta.notes || '';
   const mandatory = !!meta.mandatory;
-  const stored = listRuntimeStore().map(ensureRuntimeSha);
-  const runtimes = stored.map((r) => ({
-    id: r.id,
-    stamp: r.stamp,
-    file: r.file,
-    url: `${BASE_URL}/runtimes/${r.file}`,
-    sha256: r.sha256,
-    size: r.size,
-  }));
+  const runtimes = catalogRuntimes();
 
   const manifest = {
     version,
@@ -641,7 +782,11 @@ const server = http.createServer(async (req, res) => {
     }
     if (req.method === 'GET' && p === '/api/releases') return sendJson(res, 200, { baseUrl: BASE_URL, active: readActive(), releases: listReleases() });
     if (req.method === 'GET' && p === '/api/runtimes') {
-      return sendJson(res, 200, { runtimes: listRuntimeStore().map(ensureRuntimeSha) });
+      return sendJson(res, 200, { runtimes: catalogRuntimes() });
+    }
+    if (req.method === 'POST' && p === '/api/runtimes') {
+      if (!requireAuth(req, res)) return;
+      return await handleRuntimeUpload(req, res, url);
     }
 
     if (req.method === 'POST' && p === '/api/upload') {

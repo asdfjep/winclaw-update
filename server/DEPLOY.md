@@ -46,9 +46,10 @@ curl -s  http://127.0.0.1:8091/api/releases | head -c 300  # 列出版本，acti
 
 ## 灌数据（新版本发布包）
 
-推荐：浏览器打开 `http://10.233.129.67:8091`，拖入标准发布包 zip
-（`WinClaw-<版本>-发布包.zip`，内含瘦 exe + winclaw-update.json + `runtimes/`）→「设为发布」。
-管理端自动分流环境包到共享 `/runtimes/`、自算 SHA256、写带 `runtimes[]` 的清单。
+推荐：浏览器打开 `http://10.233.129.67:8091`。
+- 内容更新：拖入标准发布包 zip（瘦 exe + `winclaw-update.json`，可选 `runtimes/`）→「设为发布」。
+- **只补环境包**：把 `runtime-python-<stamp>.zip` 拖到「环境包仓库」区域即可，不必再带安装包。
+  若当前已有发布版本，清单 `runtimes[]` 会立刻更新；客户端下次登录就能下载。
 
 容器中转（宿主机有文件副本时）：
 

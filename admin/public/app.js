@@ -87,7 +87,7 @@ function renderRuntimes(items) {
   if (!tbody) return;
   if (count) count.textContent = `（${items.length} 个）`;
   if (!items.length) {
-    tbody.innerHTML = '<tr><td colspan="4" class="hint">暂无环境包。上传带 runtimes/ 的发布包后会自动分流到这里</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="4" class="hint">暂无环境包。把 runtime-python-*.zip 拖到上方即可单独上传</td></tr>';
     return;
   }
   tbody.innerHTML = items.map((r) => `
@@ -139,15 +139,48 @@ function escapeAttr(s) {
 
 // ---------- 上传 ----------
 
-function uploadFile(file) {
-  const zone = $('#drop-zone');
-  const bar = $('#upload-progress');
-  const fill = $('#progress-fill');
-  const txt = $('#progress-text');
-  const err = $('#upload-error');
+function isRuntimeFileName(name) {
+  return /^runtime-[a-zA-Z0-9]+-.+\.zip$/i.test(name || '');
+}
 
-  console.log(file.name);
-  if (!/\.(zip|exe)$/i.test(file.name)) {
+function bindDropZone(zone, onFile) {
+  if (!zone) return;
+  ['dragenter', 'dragover'].forEach((ev) =>
+    zone.addEventListener(ev, (e) => {
+      e.preventDefault();
+      zone.classList.add('dragover');
+    })
+  );
+  ['dragleave', 'drop'].forEach((ev) =>
+    zone.addEventListener(ev, (e) => {
+      e.preventDefault();
+      zone.classList.remove('dragover');
+    })
+  );
+  zone.addEventListener('drop', (e) => {
+    const f = e.dataTransfer.files[0];
+    if (f) onFile(f);
+  });
+}
+
+function uploadFile(file, asRuntime) {
+  const runtime = !!asRuntime || isRuntimeFileName(file.name);
+  const zone = $(runtime ? '#runtime-drop-zone' : '#drop-zone');
+  const bar = $(runtime ? '#runtime-upload-progress' : '#upload-progress');
+  const fill = $(runtime ? '#runtime-progress-fill' : '#progress-fill');
+  const txt = $(runtime ? '#runtime-progress-text' : '#progress-text');
+  const err = $(runtime ? '#runtime-upload-error' : '#upload-error');
+  const endpoint = runtime
+    ? '/api/runtimes?filename=' + encodeURIComponent(file.name)
+    : '/api/upload?filename=' + encodeURIComponent(file.name);
+
+  if (runtime) {
+    if (!/\.zip$/i.test(file.name)) {
+      err.textContent = '环境包仅支持 .zip';
+      err.classList.remove('hidden');
+      return;
+    }
+  } else if (!/\.(zip|exe)$/i.test(file.name)) {
     err.textContent = '仅支持 .zip 或 .exe 文件';
     err.classList.remove('hidden');
     return;
@@ -164,7 +197,7 @@ function uploadFile(file) {
   fill.style.width = '0%';
 
   const xhr = new XMLHttpRequest();
-  xhr.open('POST', '/api/upload?filename=' + encodeURIComponent(file.name));
+  xhr.open('POST', endpoint);
   if (token) xhr.setRequestHeader('Authorization', 'Bearer ' + token);
   xhr.responseType = 'json';
   xhr.upload.onprogress = (e) => {
@@ -178,8 +211,17 @@ function uploadFile(file) {
     bar.classList.add('hidden');
     zone.classList.remove('hidden');
     if (xhr.status >= 200 && xhr.status < 300) {
-      const n = (xhr.response && xhr.response.split) || ((xhr.response && xhr.response.runtimes) || []).length;
-      toast(`已上传 v${xhr.response.version}` + (n ? `，已分流 ${n} 个环境包` : '（未带新环境包，发布时沿用平台已有环境包）') + '。点击「设为发布」使其生效');
+      const data = xhr.response || {};
+      if (data.kind === 'runtime' || runtime) {
+        const names = (data.uploaded || data.runtimes || []).map((x) => x.file || x.id).filter(Boolean);
+        toast(
+          '已上传环境包' + (names.length ? ' ' + names.join('、') : '') +
+          (data.published ? '，已写入当前发布清单' : '。还没有发布版本，请先上传并发布一个安装包')
+        );
+      } else {
+        const n = data.split || (data.runtimes || []).length;
+        toast(`已上传 v${data.version}` + (n ? `，已分流 ${n} 个环境包` : '（未带新环境包，发布时沿用平台已有环境包）') + '。点击「设为发布」使其生效');
+      }
       refresh();
     } else {
       err.textContent = '上传失败：' + ((xhr.response && xhr.response.error) || ('HTTP ' + xhr.status));
@@ -246,23 +288,16 @@ $('#file-input').addEventListener('change', (e) => {
   e.target.value = '';
 });
 
-const zone = $('#drop-zone');
-['dragenter', 'dragover'].forEach((ev) =>
-  zone.addEventListener(ev, (e) => {
-    e.preventDefault();
-    zone.classList.add('dragover');
-  })
-);
-['dragleave', 'drop'].forEach((ev) =>
-  zone.addEventListener(ev, (e) => {
-    e.preventDefault();
-    zone.classList.remove('dragover');
-  })
-);
-zone.addEventListener('drop', (e) => {
-  const f = e.dataTransfer.files[0];
-  if (f) uploadFile(f);
-});
+const runtimeInput = $('#runtime-file-input');
+if (runtimeInput) {
+  runtimeInput.addEventListener('change', (e) => {
+    if (e.target.files[0]) uploadFile(e.target.files[0], true);
+    e.target.value = '';
+  });
+}
+
+bindDropZone($('#drop-zone'), (f) => uploadFile(f));
+bindDropZone($('#runtime-drop-zone'), (f) => uploadFile(f, true));
 
 $('#release-rows').addEventListener('click', (e) => {
   const btn = e.target.closest('button[data-act]');
