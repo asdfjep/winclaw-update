@@ -15,7 +15,7 @@
 | `hsrag-update-admin` | 仅容器内 8091（不映射宿主机） | 卷 `server_winclaw-update:/data/winclaw-update:rw` | 上传/设为发布/删除/回滚 |
 
 对外只有一个口：`http://10.233.129.67:8091`
-- `/update/winclaw-update.json`、`/update/Hs-WinClaw-Setup-*.exe` → 客户端拉更新
+- `/update/winclaw-update.json`、`/update/Hs-WinClaw-Setup-*.exe`、`/update/runtimes/*` → 客户端拉更新与环境包
 - `/`（含 `/api/*`）→ 管理端 Web 控制台
 
 **发布 = 管理端把该版本清单原子写进卷根的 `winclaw-update.json`**（清单 `url` 前缀 = `http://10.233.129.67:8091/update`）。
@@ -47,8 +47,8 @@ curl -s  http://127.0.0.1:8091/api/releases | head -c 300  # 列出版本，acti
 ## 灌数据（新版本发布包）
 
 推荐：浏览器打开 `http://10.233.129.67:8091`，拖入标准发布包 zip
-（`WinClaw-<版本>-发布包.zip`，内含 exe + winclaw-update.json）→「设为发布」。
-管理端自己算 SHA256、写清单，一步到位。
+（`WinClaw-<版本>-发布包.zip`，内含瘦 exe + winclaw-update.json + `runtimes/`）→「设为发布」。
+管理端自动分流环境包到共享 `/runtimes/`、自算 SHA256、写带 `runtimes[]` 的清单。
 
 容器中转（宿主机有文件副本时）：
 
@@ -68,8 +68,9 @@ curl -X POST http://127.0.0.1:8091/api/releases/x.y.z/publish
 ## 客户端更新流程
 
 1. 客户端每 24h（首启动约 8s）拉 `http://10.233.129.67:8091/update/winclaw-update.json`。
-2. 清单 `version` 高于本地 → 提示更新 → 下载 exe → **SHA256 校验** → 静默重装 → 拉起新版本。
-3. 数据在安装目录外（`~/.hs-winclaw`、`%APPDATA%\HsWinClaw`），重装不丢。
+2. 清单 `version` 高于本地 → 提示更新 → 下载**瘦** exe → **SHA256 校验** → 静默重装 → 拉起新版本。
+3. **每次登录**检查本地 Python 等环境；缺失则按清单 `runtimes[]` 下载 `/update/runtimes/runtime-python-<stamp>.zip`，不随内容更新重复下载。
+4. 数据在安装目录外（`~/.hs-winclaw`、`%APPDATA%\HsWinClaw`），重装不丢。
 
 ## 易错点（历史踩坑）
 

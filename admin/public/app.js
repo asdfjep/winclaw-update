@@ -58,6 +58,14 @@ async function refresh() {
     } else {
       $('#active-badge').classList.add('hidden');
     }
+    if (data.runtimeMissing) {
+      const warn = $('#runtime-warning');
+      if (warn) warn.classList.remove('hidden');
+    } else {
+      const warn = $('#runtime-warning');
+      if (warn) warn.classList.add('hidden');
+    }
+    renderRuntimes(data.runtimes || []);
     const list = await api('/api/releases');
     releases = list.releases || [];
     render();
@@ -65,6 +73,30 @@ async function refresh() {
     $('#list-error').textContent = '加载失败：' + e.message;
     $('#list-error').classList.remove('hidden');
   }
+}
+
+function runtimeHint(r) {
+  const list = r.runtimes || [];
+  if (!list.length) return '<div class="hint">沿用平台环境包</div>';
+  return `<div class="hint">${list.map((x) => escapeHtml((x.id || '') + ' ' + (x.stamp || ''))).join('、')}</div>`;
+}
+
+function renderRuntimes(items) {
+  const tbody = $('#runtime-rows');
+  const count = $('#runtime-count');
+  if (!tbody) return;
+  if (count) count.textContent = `（${items.length} 个）`;
+  if (!items.length) {
+    tbody.innerHTML = '<tr><td colspan="4" class="hint">暂无环境包。上传带 runtimes/ 的发布包后会自动分流到这里</td></tr>';
+    return;
+  }
+  tbody.innerHTML = items.map((r) => `
+    <tr>
+      <td class="mono">${escapeHtml(r.file || r.id || '')}</td>
+      <td>${escapeHtml(r.stamp || '')}</td>
+      <td class="num">${fmtSize(r.size)}</td>
+      <td class="mono">${shortSha(r.sha256)}</td>
+    </tr>`).join('');
 }
 
 function render() {
@@ -81,6 +113,7 @@ function render() {
       <td>
         <span class="ver">v${r.version}</span>
         ${r.active ? '<span class="badge active">已发布</span>' : '<span class="badge">未发布</span>'}
+        ${runtimeHint(r)}
       </td>
       <td class="num">${fmtSize(r.exeSize)}</td>
       <td class="mono">${shortSha(r.sha256)}</td>
@@ -145,7 +178,8 @@ function uploadFile(file) {
     bar.classList.add('hidden');
     zone.classList.remove('hidden');
     if (xhr.status >= 200 && xhr.status < 300) {
-      toast(`已上传 v${xhr.response.version}，点击「设为发布」使其生效`);
+      const n = (xhr.response && xhr.response.split) || ((xhr.response && xhr.response.runtimes) || []).length;
+      toast(`已上传 v${xhr.response.version}` + (n ? `，已分流 ${n} 个环境包` : '（未带新环境包，发布时沿用平台已有环境包）') + '。点击「设为发布」使其生效');
       refresh();
     } else {
       err.textContent = '上传失败：' + ((xhr.response && xhr.response.error) || ('HTTP ' + xhr.status));

@@ -22,6 +22,7 @@ const PUB_DIR = path.join(__dirname, 'public');
 const MAX_UPLOAD = 900 * 1024 * 1024; // ~900MB 上传上限
 const EXE_RE = /^(Hs-WinClaw-Setup-)(.+)(\.exe)$/i;
 const VERSION_RE = /^[0-9a-zA-Z][0-9a-zA-Z._-]*$/;
+const RUNTIME_FILE_RE = /^runtime-([a-zA-Z0-9]+)-(.+)\.zip$/i;
 
 // ---------- 小工具 ----------
 
@@ -87,6 +88,16 @@ function metaFile(version) {
   return path.join(DIR, `release-${version}.json`);
 }
 
+function runtimeStoreDir() {
+  return path.join(DIR, 'runtimes');
+}
+
+function parseRuntimeFileName(name) {
+  const base = path.basename(String(name || ''));
+  const m = RUNTIME_FILE_RE.exec(base);
+  return m ? { id: m[1].toLowerCase(), stamp: m[2], file: base } : null;
+}
+
 function versionFromFilename(name) {
   const m = EXE_RE.exec(name);
   return m ? m[2] : null;
@@ -139,6 +150,7 @@ function listReleases() {
       uploadedAt: meta.uploadedAt || null,
       publishedAt: active && active.version === version ? active.publishedAt || null : null,
       active: !!(active && active.version === version),
+      runtimes: Array.isArray(meta.runtimes) ? meta.runtimes : [],
     });
   }
   // 版本号数字排序，新的在前
@@ -199,19 +211,173 @@ function extractEntry(buf, entry) {
   throw new Error(`不支持的 zip 压缩方式 (${entry.method})`);
 }
 
-// 发布包 zip 约定：内含 Hs-WinClaw-Setup-<ver>.exe + winclaw-update.json（取其 version/notes）。
+function posixName(name) {
+  return String(name || '').replace(/\\/g, '/');
+}
+
+function buildStoredZip(files) {
+  const localParts = [];
+  const centralParts = [];
+  let offset = 0;
+  for (const f of files) {
+    const name = Buffer.from(posixName(f.name).replace(/^\/+/, ''), 'utf8');
+    const data = f.data;
+    const crc = zlib.crc32(data) >>> 0;
+    const local = Buffer.alloc(30);
+    local.writeUInt32LE(0x04034b50, 0);
+    local.writeUInt16LE(20, 4);
+    local.writeUInt16LE(0, 6);
+    local.writeUInt16LE(0, 8);
+    local.writeUInt32LE(0, 10);
+    local.writeUInt32LE(crc, 14);
+    local.writeUInt32LE(data.length, 18);
+    local.writeUInt32LE(data.length, 22);
+    local.writeUInt16LE(name.length, 26);
+    local.writeUInt16LE(0, 28);
+    localParts.push(local, name, data);
+    const central = Buffer.alloc(46);
+    central.writeUInt32LE(0x02014b50, 0);
+    central.writeUInt16LE(20, 4);
+    central.writeUInt16LE(20, 6);
+    central.writeUInt16LE(0, 8);
+    central.writeUInt16LE(0, 10);
+    central.writeUInt32LE(0, 12);
+    central.writeUInt32LE(crc, 16);
+    central.writeUInt32LE(data.length, 20);
+    central.writeUInt32LE(data.length, 24);
+    central.writeUInt16LE(name.length, 28);
+    central.writeUInt16LE(0, 30);
+    central.writeUInt16LE(0, 32);
+    central.writeUInt16LE(0, 34);
+    central.writeUInt16LE(0, 36);
+    central.writeUInt32LE(0, 38);
+    central.writeUInt32LE(offset, 42);
+    centralParts.push(central, name);
+    offset += local.length + name.length + data.length;
+  }
+  const centralStart = offset;
+  const centralBuf = Buffer.concat(centralParts);
+  const eocd = Buffer.alloc(22);
+  eocd.writeUInt32LE(0x06054b50, 0);
+  eocd.writeUInt16LE(files.length, 8);
+  eocd.writeUInt16LE(files.length, 10);
+  eocd.writeUInt32LE(centralBuf.length, 12);
+  eocd.writeUInt32LE(centralStart, 16);
+  return Buffer.concat([...localParts, centralBuf, eocd]);
+}
+
+function runtimeMetaFromBuffer(file, data) {
+  const parsed = parseRuntimeFileName(file);
+  if (!parsed) return null;
+  return {
+    id: parsed.id,
+    stamp: parsed.stamp,
+    file: parsed.file,
+    sha256: crypto.createHash('sha256').update(data).digest('hex'),
+    size: data.length,
+  };
+}
+
+function collectPythonOfflineFiles(buf, entries) {
+  const files = [];
+  for (const e of entries) {
+    const n = posixName(e.name);
+    if (n.endsWith('/')) continue;
+    const marker = 'python-offline/';
+    const idx = n.toLowerCase().indexOf(marker);
+    if (idx < 0) continue;
+    const rel = n.slice(idx + marker.length);
+    if (!rel || rel.endsWith('/')) continue;
+    files.push({ name: rel, data: extractEntry(buf, e) });
+  }
+  return files;
+}
+
+function listRuntimeStore() {
+  const dir = runtimeStoreDir();
+  let files = [];
+  try {
+    files = fs.readdirSync(dir);
+  } catch {
+    return [];
+  }
+  const out = [];
+  for (const f of files) {
+    const parsed = parseRuntimeFileName(f);
+    if (!parsed) continue;
+    const p = path.join(dir, f);
+    let size = 0;
+    let sha256 = null;
+    try {
+      size = fs.statSync(p).size;
+      const metaSidecar = path.join(dir, `${f}.sha256`);
+      if (fs.existsSync(metaSidecar)) {
+        sha256 = fs.readFileSync(metaSidecar, 'utf8').trim();
+      }
+    } catch { /* ignore */ }
+    out.push({
+      id: parsed.id,
+      stamp: parsed.stamp,
+      file: parsed.file,
+      size,
+      sha256,
+      url: `${BASE_URL}/runtimes/${parsed.file}`,
+    });
+  }
+  out.sort((a, b) => String(b.stamp).localeCompare(String(a.stamp)));
+  return out;
+}
+
+function ensureRuntimeSha(entry) {
+  if (entry.sha256) return entry;
+  const p = path.join(runtimeStoreDir(), entry.file);
+  if (!fs.existsSync(p)) return entry;
+  const sha = crypto.createHash('sha256');
+  sha.update(fs.readFileSync(p));
+  entry.sha256 = sha.digest('hex');
+  try {
+    fs.writeFileSync(path.join(runtimeStoreDir(), `${entry.file}.sha256`), entry.sha256 + '\n');
+  } catch { /* ignore */ }
+  return entry;
+}
+
+function writeRuntimePack(file, data) {
+  const parsed = parseRuntimeFileName(file);
+  if (!parsed) throw new Error(`环境包文件名不合法：${file}`);
+  const dir = runtimeStoreDir();
+  fs.mkdirSync(dir, { recursive: true });
+  const dest = path.join(dir, parsed.file);
+  const sha256 = crypto.createHash('sha256').update(data).digest('hex');
+  let overwritten = false;
+  if (fs.existsSync(dest)) {
+    const existing = crypto.createHash('sha256').update(fs.readFileSync(dest)).digest('hex');
+    if (existing === sha256) {
+      return { ...parsed, sha256, size: data.length, reused: true, overwritten: false };
+    }
+    overwritten = true;
+  }
+  fs.writeFileSync(dest, data);
+  fs.writeFileSync(path.join(dir, `${parsed.file}.sha256`), sha256 + '\n');
+  return { ...parsed, sha256, size: data.length, reused: false, overwritten };
+}
+
+// 发布包 zip 约定：Hs-WinClaw-Setup-<ver>.exe + winclaw-update.json
+// + 可选 runtimes/runtime-<id>-<stamp>.zip（或根目录同名）+ 可选 python-offline/ 目录。
 function extractReleaseZip(buf) {
   const entries = zipEntries(buf);
   let exe = null;
   let manifest = null;
+  const runtimeBuffers = [];
   for (const e of entries) {
     if (e.name.endsWith('/')) continue;
-    const base = path.posix.basename(e.name);
+    const base = path.posix.basename(posixName(e.name));
     if (EXE_RE.test(base) && !exe) exe = { base, data: extractEntry(buf, e) };
     else if (base === 'winclaw-update.json' && !manifest) {
       try {
         manifest = JSON.parse(extractEntry(buf, e).toString('utf8'));
       } catch { /* 内嵌清单不可解析则忽略 */ }
+    } else if (parseRuntimeFileName(base)) {
+      runtimeBuffers.push({ file: base, data: extractEntry(buf, e) });
     }
   }
   if (!exe) throw new Error('zip 中未找到 Hs-WinClaw-Setup-<ver>.exe');
@@ -221,11 +387,36 @@ function extractReleaseZip(buf) {
   if (!version || !safeVersion(version)) {
     throw new Error('无法从 zip 推断版本号（内嵌清单缺失或文件名不规范）');
   }
+
+  const runtimes = runtimeBuffers.map((r) => runtimeMetaFromBuffer(r.file, r.data)).filter(Boolean);
+  const runtimeData = {};
+  for (const r of runtimeBuffers) runtimeData[r.file] = r.data;
+
+  const offlineFiles = collectPythonOfflineFiles(buf, entries);
+  if (offlineFiles.length && !runtimes.some((x) => x.id === 'python')) {
+    const stampFile = offlineFiles.find((f) => posixName(f.name) === 'stamp');
+    const stamp = stampFile ? stampFile.data.toString('utf8').trim() : '3.12.10-1';
+    const file = `runtime-python-${stamp}.zip`;
+    const packed = buildStoredZip(offlineFiles);
+    runtimeData[file] = packed;
+    runtimes.push(runtimeMetaFromBuffer(file, packed));
+  }
+
+  if (Array.isArray(manifest && manifest.runtimes)) {
+    for (const declared of manifest.runtimes) {
+      const file = declared && (declared.file || path.basename(declared.url || ''));
+      if (!file || !parseRuntimeFileName(file)) continue;
+      if (runtimes.some((x) => x.file === file)) continue;
+    }
+  }
+
   return {
     version,
     data: exe.data,
     notes: (manifest && manifest.notes) || '',
     mandatory: !!(manifest && manifest.mandatory),
+    runtimes,
+    runtimeData,
   };
 }
 
@@ -239,7 +430,7 @@ async function handleUpload(req, res, url) {
   const body = await readBody(req);
   if (body.length === 0) return sendJson(res, 400, { error: '上传内容为空' });
 
-  let version, exeData, notes = '', mandatory = false;
+  let version, exeData, notes = '', mandatory = false, splitRuntimes = [];
 
   if (filename.toLowerCase().endsWith('.zip')) {
     let extracted;
@@ -252,6 +443,11 @@ async function handleUpload(req, res, url) {
     exeData = extracted.data;
     notes = extracted.notes;
     mandatory = extracted.mandatory;
+    for (const rt of extracted.runtimes || []) {
+      const data = extracted.runtimeData && extracted.runtimeData[rt.file];
+      if (!data) continue;
+      splitRuntimes.push(writeRuntimePack(rt.file, data));
+    }
   } else if (filename.toLowerCase().endsWith('.exe')) {
     version = versionFromFilename(filename);
     if (!version || !safeVersion(version)) {
@@ -269,6 +465,14 @@ async function handleUpload(req, res, url) {
 
   const uploadedAt = new Date().toISOString();
   const sha256 = crypto.createHash('sha256').update(exeData).digest('hex');
+  const runtimeMeta = splitRuntimes.map((r) => ({
+    id: r.id,
+    stamp: r.stamp,
+    file: r.file,
+    sha256: r.sha256,
+    size: r.size,
+    url: `${BASE_URL}/runtimes/${r.file}`,
+  }));
   fs.writeFileSync(targetExe, exeData);
   atomicWriteJson(metaFile(version), {
     version,
@@ -278,6 +482,7 @@ async function handleUpload(req, res, url) {
     notes,
     mandatory,
     uploadedAt,
+    runtimes: runtimeMeta,
   });
 
   sendJson(res, 201, {
@@ -289,6 +494,8 @@ async function handleUpload(req, res, url) {
     mandatory,
     uploadedAt,
     active: false,
+    runtimes: runtimeMeta,
+    split: runtimeMeta.length,
   });
 }
 
@@ -305,6 +512,15 @@ async function handlePublish(res, url) {
   const meta = readMeta(version) || {};
   const notes = meta.notes || '';
   const mandatory = !!meta.mandatory;
+  const stored = listRuntimeStore().map(ensureRuntimeSha);
+  const runtimes = stored.map((r) => ({
+    id: r.id,
+    stamp: r.stamp,
+    file: r.file,
+    url: `${BASE_URL}/runtimes/${r.file}`,
+    sha256: r.sha256,
+    size: r.size,
+  }));
 
   const manifest = {
     version,
@@ -313,9 +529,10 @@ async function handlePublish(res, url) {
     notes,
     mandatory,
     publishedAt: today(),
+    runtimes,
   };
   atomicWriteJson(path.join(DIR, 'winclaw-update.json'), manifest);
-  atomicWriteJson(metaFile(version), { ...meta, version, filename: exeFileName(version), exeSize, sha256, mandatory });
+  atomicWriteJson(metaFile(version), { ...meta, version, filename: exeFileName(version), exeSize, sha256, mandatory, runtimes: meta.runtimes || runtimes });
 
   sendJson(res, 200, { ok: true, manifest });
 }
@@ -411,15 +628,21 @@ const server = http.createServer(async (req, res) => {
     if (req.method === 'GET' && p === '/healthz') return sendText(res, 200, 'ok');
     if (req.method === 'GET' && p === '/api/config') {
       const active = readActive();
+      const runtimes = listRuntimeStore();
       return sendJson(res, 200, {
         baseUrl: BASE_URL,
         dir: DIR,
         authRequired: !!ADMIN_TOKEN,
         active,
         orphan: active ? !fs.existsSync(path.join(DIR, exeFileName(active.version))) : false,
+        runtimes,
+        runtimeMissing: runtimes.length === 0,
       });
     }
     if (req.method === 'GET' && p === '/api/releases') return sendJson(res, 200, { baseUrl: BASE_URL, active: readActive(), releases: listReleases() });
+    if (req.method === 'GET' && p === '/api/runtimes') {
+      return sendJson(res, 200, { runtimes: listRuntimeStore().map(ensureRuntimeSha) });
+    }
 
     if (req.method === 'POST' && p === '/api/upload') {
       if (!requireAuth(req, res)) return;
@@ -463,6 +686,7 @@ const server = http.createServer(async (req, res) => {
 
 try {
   fs.mkdirSync(DIR, { recursive: true });
+  fs.mkdirSync(runtimeStoreDir(), { recursive: true });
 } catch (e) {
   console.error(`[winclaw-admin] 无法创建更新目录 ${DIR}: ${e.message}`);
 }
