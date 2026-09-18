@@ -92,6 +92,20 @@ td.ops { white-space: nowrap; }
   white-space: nowrap;
 }
 .badge.active { background: #ecfdf5; border-color: var(--green); color: var(--green); }
+
+/* 版本号旁的「下载安装包」直链：走同源 /update/* 静态分发，不依赖发布状态 */
+.dl {
+  display: inline-block;
+  padding: 1px 8px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  font-size: 11px;
+  color: var(--accent);
+  text-decoration: none;
+  white-space: nowrap;
+}
+.dl:hover { border-color: var(--accent); background: #eff6ff; }
+
 .hidden { display: none !important; }
 
 button, .btn {

@@ -109,10 +109,15 @@ function render() {
   tbody.innerHTML = '';
   for (const r of releases) {
     const tr = document.createElement('tr');
+    const file = r.filename || `Hs-WinClaw-Setup-${r.version}.exe`;
+    // 直接下载走同源 /update/* 静态分发（nginx alias / 管理端静态路由皆可），
+    // 用相对路径以免把 BASE_URL 里写死的 IP 带进浏览器。
+    const href = '/update/' + encodeURIComponent(file);
     tr.innerHTML = `
       <td>
         <span class="ver">v${r.version}</span>
         ${r.active ? '<span class="badge active">已发布</span>' : '<span class="badge">未发布</span>'}
+        <a class="dl" href="${href}" download="${escapeAttr(file)}" title="下载 ${escapeAttr(file)}（${fmtSize(r.exeSize)}）">下载安装包</a>
         ${runtimeHint(r)}
       </td>
       <td class="num">${fmtSize(r.exeSize)}</td>

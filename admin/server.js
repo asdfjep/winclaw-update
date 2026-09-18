@@ -808,12 +808,18 @@ const server = http.createServer(async (req, res) => {
 
     // 更新包静态文件分发：/update/* 直接从更新目录返回（供客户端 + 管理端历史上传文件）
     if (req.method === 'GET' && p.startsWith('/update/')) {
-      const rel = p.slice('/update/'.length);
-      const file = path.normalize(path.join(DIR, rel));
-      if (!file.startsWith(DIR)) return sendText(res, 403, 'Forbidden', 'text/plain; charset=utf-8');
+      const rel = decodeURIComponent(p.slice('/update/'.length));
+      const file = path.resolve(DIR, rel);
+      // 用 path.relative 判定越界：不能直接 startsWith(DIR)，Windows 上 join 出的是 \ 分隔符会误判
+      const r = path.relative(path.resolve(DIR), file);
+      if (r.startsWith('..') || path.isAbsolute(r)) return sendText(res, 403, 'Forbidden', 'text/plain; charset=utf-8');
       if (fs.existsSync(file) && fs.statSync(file).isFile()) {
         const ext = path.extname(file).toLowerCase();
-        res.writeHead(200, { 'Content-Type': (ext === '.json' ? 'application/json; charset=utf-8' : 'application/octet-stream'), 'Cache-Control': 'no-cache' });
+        res.writeHead(200, {
+          'Content-Type': ext === '.json' ? 'application/json; charset=utf-8' : 'application/octet-stream',
+          'Cache-Control': 'no-cache',
+          'Content-Length': fs.statSync(file).size,
+        });
         return fs.createReadStream(file).pipe(res);
       }
       return sendText(res, 404, 'Not Found', 'text/plain; charset=utf-8');

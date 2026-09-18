@@ -50,6 +50,9 @@ curl -s  http://127.0.0.1:8091/api/releases | head -c 300  # 列出版本，acti
 - 内容更新：拖入标准发布包 zip（瘦 exe + `winclaw-update.json`，可选 `runtimes/`）→「设为发布」。
 - **只补环境包**：把 `runtime-python-<stamp>.zip` 拖到「环境包仓库」区域即可，不必再带安装包。
   若当前已有发布版本，清单 `runtimes[]` 会立刻更新；客户端下次登录就能下载。
+- **取回安装包**：发布列表每行版本号旁的「下载安装包」直接下载卷内的
+  `Hs-WinClaw-Setup-<版本>.exe`（等价 `curl -O http://127.0.0.1:8091/update/Hs-WinClaw-Setup-<版本>.exe`），
+  与是否「已发布」无关。
 
 容器中转（宿主机有文件副本时）：
 
