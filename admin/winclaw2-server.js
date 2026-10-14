@@ -20,7 +20,6 @@ const AUDIT = path.join(PRIVATE, 'audit.jsonl');
 const WEB = path.join(__dirname, 'public');
 const BASE_URL = (process.env.WINCLAW_UPDATE_BASE_URL || 'http://10.233.129.67:8091/update').replace(/\/+$/, '');
 const PORT = Number(process.env.WINCLAW_ADMIN_PORT || 8091);
-const TOKEN = process.env.WINCLAW_ADMIN_TOKEN || '';
 const MAX_UPLOAD = 2 * 1024 * 1024 * 1024;
 const MAX_JSON = 64 * 1024;
 const SESSION_TTL = 24 * 60 * 60 * 1000;
@@ -109,17 +108,6 @@ function validateRelease(raw) {
     platform: 'windows', arch: 'x64', packageType: 'nsis-full', file: raw.file,
     size: raw.size, sha512: raw.sha512, unpackedSize: raw.unpackedSize,
     buildCommit: raw.buildCommit, builtAt: raw.builtAt, releaseNotes: raw.releaseNotes });
-}
-function authorized(req) {
-  if (!TOKEN) return false;
-  const supplied = req.headers.authorization?.startsWith('Bearer ') ? req.headers.authorization.slice(7) : '';
-  const a = Buffer.from(supplied);
-  const b = Buffer.from(TOKEN);
-  return a.length === b.length && crypto.timingSafeEqual(a, b);
-}
-function assertAuthorized(req) {
-  if (!TOKEN) bad(503, '管理凭据未配置');
-  if (!authorized(req)) bad(401, '管理凭据无效');
 }
 async function receiveInstaller(req, session) {
   if (session.state !== 'created') bad(409, '此会话已使用');
@@ -310,7 +298,6 @@ async function handle(req, res) {
     if (req.method === 'GET' || req.method === 'HEAD') return serveStatic(req, res, pathname);
     bad(404, 'Not found');
   }
-  assertAuthorized(req);
   if (req.method === 'GET' && pathname === '/api/v2/releases') return json(res, 200, { releases: await listReleases(), baseUrl: BASE_URL });
   if (req.method === 'GET' && pathname === '/api/v2/channels') return json(res, 200, {
     stable: await getChannel('stable'), preview: await getChannel('preview') });

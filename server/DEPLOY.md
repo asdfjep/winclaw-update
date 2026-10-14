@@ -6,13 +6,13 @@
 
 先确认现有 `server_winclaw-update` 命名卷及旧版当前清单，完整备份该卷和当前 Compose 配置。旧 WinClaw 1.x 的清单、安装包、运行包及元数据只做离线归档；新 Nginx 配置不再对外提供旧版更新 URL，也不会把旧安装包重定向到 WinClaw2。
 
-目标服务器使用 snap Docker，保留固定命名卷名 `server_winclaw-update`；`node:22-alpine` 与 `nginx:alpine` 镜像应已在本地缓存。管理 Token 通过部署环境变量 `WINCLAW_ADMIN_TOKEN` 注入，必须非空。不要把真实 Token 写入仓库或 Compose 文件。
+目标服务器使用 snap Docker，保留固定命名卷名 `server_winclaw-update`；`node:22-alpine` 与 `nginx:alpine` 镜像应已在本地缓存。管理页面和 API 不要求 Token，因此必须在网络边界将 `8091` 限制到可信设备。
 
 ## 部署
 
 1. 备份旧卷，暂停旧 update-admin 写入进程，确保同一卷只有一个管理员写进程。
 2. 构建并启动 `server/docker-compose.update.yml`；离线构建只复制仓库文件，不调用 npm。
-3. 检查 `/healthz`、管理页面、未认证 `/api/v2/releases` 返回 401、`/update/` 下旧版路径返回 404。
+3. 检查 `/healthz`、管理页面、无 Token 的 `/api/v2/releases` 返回 200，以及 `/update/` 下旧版路径返回 404。
 4. 验证新清单精确代理与 query 参数；发布前 stable/preview 均应显示暂无版本。
 5. 上传完整包到 preview，在真实 Windows 安装客户端验证，再提升同一包到 stable。
 

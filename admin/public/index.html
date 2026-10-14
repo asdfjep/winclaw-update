@@ -9,15 +9,9 @@
 <body>
   <header>
     <div><h1>WinClaw2 更新管理</h1><p>完整 Windows x64 安装包 · 正式与预览独立发布</p></div>
-    <button id="logout" hidden>退出管理</button>
   </header>
   <main>
-    <section id="login-panel" class="card">
-      <h2>管理凭据</h2>
-      <p>输入部署时设置的更新管理 Token。凭据只保存在当前页面内存中。</p>
-      <form id="login-form"><input id="token" type="password" autocomplete="off" required aria-label="管理 Token"><button>进入</button></form>
-    </section>
-    <div id="workspace" hidden>
+    <div id="workspace">
       <section class="card">
         <h2>上传完整安装包</h2>
         <p>选择同一次打包生成的 <code>release.json</code> 和完整 <code>WinClaw-版本-win-x64.exe</code>。上传并校验后仍需明确发布。</p>

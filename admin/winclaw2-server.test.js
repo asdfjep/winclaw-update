@@ -19,9 +19,11 @@ async function startService(t) {
   const root = await fs.mkdtemp(path.join(os.tmpdir(), 'winclaw2-update-'));
   const port = await freePort();
   const base = `http://127.0.0.1:${port}`;
+  const env = { ...process.env, WINCLAW_UPDATE_DIR: root, WINCLAW_ADMIN_PORT: String(port),
+    WINCLAW_UPDATE_BASE_URL: `${base}/update` };
+  delete env.WINCLAW_ADMIN_TOKEN;
   const child = spawn(process.execPath, [path.join(__dirname, 'winclaw2-server.js')], {
-    env: { ...process.env, WINCLAW_UPDATE_DIR: root, WINCLAW_ADMIN_PORT: String(port),
-      WINCLAW_ADMIN_TOKEN: 'test-token', WINCLAW_UPDATE_BASE_URL: `${base}/update` },
+    env,
     stdio: ['ignore', 'pipe', 'pipe'],
   });
   let diagnostics = '';
@@ -35,8 +37,8 @@ async function startService(t) {
   }
   throw new Error(`server did not become ready: ${diagnostics}`);
 }
-async function api(base, route, method = 'GET', body, token = 'test-token') {
-  const response = await fetch(base + route, { method, headers: { Authorization: `Bearer ${token}`,
+async function api(base, route, method = 'GET', body) {
+  const response = await fetch(base + route, { method, headers: {
     ...(body && !Buffer.isBuffer(body) ? { 'Content-Type': 'application/json' } : {}),
     ...(Buffer.isBuffer(body) ? { 'Content-Type': 'application/octet-stream' } : {}) },
   body: body == null ? undefined : Buffer.isBuffer(body) ? body : JSON.stringify(body) });
@@ -63,7 +65,11 @@ test('full installer is verified before preview and stable publication', async (
   const { base, root } = await startService(t);
   const binary = Buffer.from('MZ WinClaw2 full installer fixture');
   const meta = metadata('2.1.1', binary);
-  assert.equal((await api(base, '/api/v2/releases', 'GET', null, 'wrong')).status, 401);
+  assert.equal((await api(base, '/api/v2/releases')).status, 200);
+  assert.equal((await api(base, '/api/v2/channels')).status, 200);
+  const page = await (await fetch(base)).text();
+  assert.match(page, /WinClaw2 更新管理/);
+  assert.doesNotMatch(page, /login-form|管理 Token/);
   assert.equal((await api(base, '/api/v2/uploads', 'POST', { ...meta, packageType: 'delta' })).status, 400);
   assert.equal((await api(base, '/api/v2/uploads', 'POST', { ...meta, arch: 'arm64' })).status, 400);
   assert.equal((await upload(base, meta, binary)).status, 200);

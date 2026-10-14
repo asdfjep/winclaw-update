@@ -12,6 +12,6 @@
 
 更新安装包从 `D:\winclaw2\winclaw2` 的 `scripts/winclaw-package-update.mjs` 生成。管理端先接收 `release.json` 与完整 EXE，校验后由管理员明确发布到 preview；验收后将同一不可变文件提升至 stable。上传本身不会更改客户端清单。服务不会生成、存储或提供 `.blockmap`、Web 安装器及补丁包。
 
-管理 API 需要 `WINCLAW_ADMIN_TOKEN`。清单由通道指针即时生成，完整 EXE 由 Nginx 提供。私有指针、上传暂存和审计文件不在可下载目录内。
+管理页面打开后直接显示发布工作区，管理 API 不要求 Token。能访问 `8091` 的客户端都能操作发布，请在网络边界仅允许可信设备访问该端口。清单由通道指针即时生成，完整 EXE 由 Nginx 提供。私有指针、上传暂存和审计文件不在可下载目录内。
 
 部署与迁移步骤见 [DEPLOY.md](server/DEPLOY.md)。本仓库原有的 WinClaw 1.x 代码已从活跃服务移除；迁移前先备份原命名卷，不把旧版安装包转发给 WinClaw2 客户端。

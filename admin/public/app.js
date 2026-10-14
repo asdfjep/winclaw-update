@@ -1,7 +1,6 @@
 'use strict';
 
 const $ = (selector) => document.querySelector(selector);
-let token = '';
 let channels = null;
 let releases = [];
 
@@ -12,7 +11,7 @@ function message(value, error = false) {
 }
 function size(bytes) { return `${(bytes / (1024 * 1024)).toFixed(1)} MiB`; }
 async function api(url, options = {}) {
-  const response = await fetch(url, { ...options, headers: { ...options.headers, Authorization: `Bearer ${token}` } });
+  const response = await fetch(url, options);
   const result = await response.json().catch(() => ({}));
   if (!response.ok) throw new Error(result.error || `HTTP ${response.status}`);
   return result;
@@ -102,7 +101,6 @@ function uploadBinary(id, file) {
   return new Promise((resolve, reject) => {
     const xhr = new XMLHttpRequest();
     xhr.open('PUT', `/api/v2/uploads/${id}/installer`);
-    xhr.setRequestHeader('Authorization', `Bearer ${token}`);
     xhr.setRequestHeader('Content-Type', 'application/octet-stream');
     xhr.upload.onprogress = (event) => {
       if (event.lengthComputable) {
@@ -140,23 +138,7 @@ async function upload() {
   } catch (error) { message(error.message, true); }
   finally { button.disabled = false; $('#upload-progress').hidden = true; }
 }
-$('#login-form').addEventListener('submit', async (event) => {
-  event.preventDefault();
-  token = $('#token').value.trim();
-  try {
-    await refresh();
-    $('#login-panel').hidden = true;
-    $('#workspace').hidden = false;
-    $('#logout').hidden = false;
-    $('#token').value = '';
-    message('管理数据已加载');
-  } catch (error) { token = ''; message(error.message, true); }
-});
-$('#logout').addEventListener('click', () => {
-  token = ''; channels = null; releases = [];
-  $('#login-panel').hidden = false; $('#workspace').hidden = true; $('#logout').hidden = true;
-  message('已退出');
-});
+refresh().catch((error) => message(error.message, true));
 $('#refresh').addEventListener('click', () => refresh().catch((error) => message(error.message, true)));
 $('#upload').addEventListener('click', upload);
 for (const channel of ['stable', 'preview']) $('#'+channel+'-restore').addEventListener('click', () => restore(channel));
