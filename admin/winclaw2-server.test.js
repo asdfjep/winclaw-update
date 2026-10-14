@@ -15,8 +15,8 @@ async function freePort() {
   await new Promise((resolve) => server.close(resolve));
   return port;
 }
-async function startService(t) {
-  const root = await fs.mkdtemp(path.join(os.tmpdir(), 'winclaw2-update-'));
+async function startService(t, preparedRoot = null) {
+  const root = preparedRoot ?? await fs.mkdtemp(path.join(os.tmpdir(), 'winclaw2-update-'));
   const port = await freePort();
   const base = `http://127.0.0.1:${port}`;
   const env = { ...process.env, WINCLAW_UPDATE_DIR: root, WINCLAW_ADMIN_PORT: String(port),
@@ -95,7 +95,10 @@ test('full installer is verified before preview and stable publication', async (
   channels = (await api(base, '/api/v2/channels')).body;
   assert.equal(channels.stable.releaseId, channels.preview.releaseId);
   assert.equal((await api(base, '/api/v2/releases/2.1.1-windows-x64', 'DELETE')).status, 409);
-  assert.equal(await fs.readFile(path.join(root, 'public', 'winclaw2', 'releases', '2.1.1-windows-x64', meta.file), 'utf8'), binary.toString());
+  const publishedFile = path.join(root, 'public', 'winclaw2', 'releases', '2.1.1-windows-x64', meta.file);
+  assert.equal(await fs.readFile(publishedFile, 'utf8'), binary.toString());
+  // Linux Nginx worker 不能读取 0600；公开包必须在 ready 前可由其他用户读取。
+  if (process.platform !== 'win32') assert.equal((await fs.stat(publishedFile)).mode & 0o777, 0o644);
 });
 
 test('partial upload never becomes ready and restore requires previous release', async (t) => {
@@ -127,4 +130,19 @@ test('channel restore does not downgrade an installer and protects recent assets
   const feed = await fetch(`${base}/update/winclaw2/latest.yml?channel=3`);
   assert.match(await feed.text(), /version: "2\.1\.1"/);
   assert.equal((await fetch(`${base}/update/winclaw2/latest.yml?channel=3&platform=darwin-arm64`)).status, 400);
+});
+
+test('startup repairs read permission on an existing ready installer', { skip: process.platform === 'win32' }, async (t) => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), 'winclaw2-update-ready-'));
+  const bytes = Buffer.from('MZ existing ready installer');
+  const meta = metadata('2.1.3', bytes);
+  const publicDir = path.join(root, 'public', 'winclaw2', 'releases', '2.1.3-windows-x64');
+  const releaseDir = path.join(root, 'private', 'releases');
+  await fs.mkdir(publicDir, { recursive: true });
+  await fs.mkdir(releaseDir, { recursive: true });
+  const installer = path.join(publicDir, meta.file);
+  await fs.writeFile(installer, bytes, { mode: 0o600 });
+  await fs.writeFile(path.join(releaseDir, '2.1.3-windows-x64.json'), JSON.stringify(meta));
+  await startService(t, root);
+  assert.equal((await fs.stat(installer)).mode & 0o777, 0o644);
 });

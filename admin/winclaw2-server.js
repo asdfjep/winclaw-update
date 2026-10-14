@@ -162,6 +162,8 @@ async function commitUpload(session) {
     const finalFile = packagePath(session.meta);
     if (await exists(finalFile)) await fsp.rm(finalFile, { force: true }); // orphan from interrupted complete
     await fsp.rename(session.file, finalFile);
+    // 发布前赋予 Nginx worker 读取权限；暂存文件仍保持 0600。
+    await fsp.chmod(finalFile, 0o644);
     await syncDir(dir);
     await atomicJson(releaseMetaPath(id), session.meta); // ready marker is committed last
     session.state = 'complete';
@@ -328,8 +330,22 @@ async function handle(req, res) {
   bad(404, 'Not found');
 }
 
+async function repairReadyPackagePermissions() {
+  for (const name of await fsp.readdir(RELEASES)) {
+    if (!name.endsWith('.json')) continue;
+    const raw = await readJsonFile(path.join(RELEASES, name));
+    if (!raw) continue;
+    const meta = validateRelease(raw);
+    if (name !== releaseId(meta.version) + '.json') continue;
+    // 旧版提交保留了暂存文件的 0600，重启时修复已发布包的 Nginx 读取权限。
+    try { await fsp.chmod(packagePath(meta), 0o644); }
+    catch (error) { if (error.code !== 'ENOENT') throw error; }
+  }
+}
+
 async function main() {
   for (const dir of [PUBLIC, PRIVATE, UPLOADS, RELEASES, CHANNELS]) await fsp.mkdir(dir, { recursive: true });
+  await repairReadyPackagePermissions();
   await cleanupUploads();
   setInterval(() => { void cleanupUploads().catch(console.error); }, 60 * 60 * 1000).unref();
   const server = http.createServer((req, res) => {
