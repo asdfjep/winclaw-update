@@ -1,117 +1,43 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="zh-CN">
 <head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>WinClaw 更新管理</title>
-<link rel="stylesheet" href="app.css">
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>WinClaw2 更新管理</title>
+  <link rel="stylesheet" href="/app.css">
 </head>
 <body>
-<header>
-  <div class="brand">
-    <h1>WinClaw 更新管理</h1>
-    <span class="sub" id="base-url">—</span>
-  </div>
-  <div class="header-actions">
-    <span id="active-badge" class="badge active hidden">已发布 v<span id="active-version"></span></span>
-    <button id="btn-refresh" title="刷新">刷新</button>
-  </div>
-</header>
-
-<main>
-  <section class="card upload-card">
-    <h2>上传发布包</h2>
-    <div id="drop-zone" class="drop-zone">
-      <p>拖拽 <code>.zip</code> 发布包或 <code>.exe</code> 安装包到这里，或</p>
-      <label class="btn" for="file-input">选择文件</label>
-      <input type="file" id="file-input" accept=".zip,.exe" hidden>
-      <p class="hint">zip = 瘦安装包 + <code>winclaw-update.json</code>，可选附带 <code>runtimes/</code>。也可把 <code>runtime-python-*.zip</code> 单独丢到这里或下方环境包区域。</p>
+  <header>
+    <div><h1>WinClaw2 更新管理</h1><p>完整 Windows x64 安装包 · 正式与预览独立发布</p></div>
+    <button id="logout" hidden>退出管理</button>
+  </header>
+  <main>
+    <section id="login-panel" class="card">
+      <h2>管理凭据</h2>
+      <p>输入部署时设置的更新管理 Token。凭据只保存在当前页面内存中。</p>
+      <form id="login-form"><input id="token" type="password" autocomplete="off" required aria-label="管理 Token"><button>进入</button></form>
+    </section>
+    <div id="workspace" hidden>
+      <section class="card">
+        <h2>上传完整安装包</h2>
+        <p>选择同一次打包生成的 <code>release.json</code> 和完整 <code>WinClaw-版本-win-x64.exe</code>。上传并校验后仍需明确发布。</p>
+        <div class="inputs"><label>发布元数据 <input id="release-file" type="file" accept=".json"></label><label>完整安装包 <input id="installer-file" type="file" accept=".exe"></label></div>
+        <button id="upload">上传并校验</button>
+        <progress id="upload-progress" max="100" value="0" hidden></progress>
+        <span id="upload-status"></span>
+      </section>
+      <section class="channels">
+        <article class="card"><h2>预览通道</h2><div id="preview-current"></div><button id="preview-restore">撤回到上一版本</button></article>
+        <article class="card"><h2>正式通道</h2><div id="stable-current"></div><button id="stable-restore">撤回到上一版本</button></article>
+      </section>
+      <section class="card">
+        <div class="title-row"><h2>已校验版本</h2><button id="refresh">刷新</button></div>
+        <p class="hint">预览和正式引用同一个不可变安装包。撤回只阻止后续升级，不会降低已安装版本。</p>
+        <div class="table-scroll"><table><thead><tr><th>版本</th><th>大小 / SHA512</th><th>构建</th><th>状态</th><th>操作</th></tr></thead><tbody id="releases"></tbody></table></div>
+      </section>
     </div>
-    <div id="upload-progress" class="upload-progress hidden">
-      <div class="progress-bar"><div id="progress-fill" class="progress-fill"></div></div>
-      <div id="progress-text" class="hint">上传中…</div>
-    </div>
-    <div id="upload-error" class="error hidden"></div>
-    <div id="runtime-warning" class="error hidden">平台上还没有环境包。请在下方单独上传 <code>runtime-python-*.zip</code>，否则新安装客户端登录后无法下载 Python。</div>
-  </section>
-
-  <section class="card">
-    <h2>环境包仓库 <span class="hint" id="runtime-count"></span></h2>
-    <div id="runtime-drop-zone" class="drop-zone compact">
-      <p>单独上传环境包：拖拽 <code>runtime-python-&lt;stamp&gt;.zip</code>，或</p>
-      <label class="btn" for="runtime-file-input">选择环境包</label>
-      <input type="file" id="runtime-file-input" accept=".zip" hidden>
-      <p class="hint">不需要安装包。若已有发布版本，上传后会立刻写入清单 <code>runtimes[]</code>。</p>
-    </div>
-    <div id="runtime-upload-progress" class="upload-progress hidden">
-      <div class="progress-bar"><div id="runtime-progress-fill" class="progress-fill"></div></div>
-      <div id="runtime-progress-text" class="hint">上传中…</div>
-    </div>
-    <div id="runtime-upload-error" class="error hidden"></div>
-    <table>
-      <thead>
-        <tr>
-          <th>包</th>
-          <th>stamp</th>
-          <th class="num">大小</th>
-          <th>SHA256</th>
-        </tr>
-      </thead>
-      <tbody id="runtime-rows">
-        <tr><td colspan="4" class="hint">加载中…</td></tr>
-      </tbody>
-    </table>
-  </section>
-
-  <section class="card">
-    <h2>发布列表 <span class="hint" id="list-count"></span></h2>
-    <table>
-      <thead>
-        <tr>
-          <th>版本</th>
-          <th class="num">大小</th>
-          <th>SHA256</th>
-          <th>上传时间</th>
-          <th>发布说明</th>
-          <th>操作</th>
-        </tr>
-      </thead>
-      <tbody id="release-rows">
-        <tr><td colspan="6" class="hint">加载中…</td></tr>
-      </tbody>
-    </table>
-    <div class="error hidden" id="list-error"></div>
-  </section>
-</main>
-
-<div id="modal-notes" class="modal hidden">
-  <div class="modal-box">
-    <h3>编辑发布说明 <span id="notes-version"></span></h3>
-    <textarea id="notes-text" rows="8" placeholder="该版本的更新说明，客户端更新弹窗会展示多条，每行一条"></textarea>
-    <label class="check">
-      <input type="checkbox" id="notes-mandatory">
-      <span>强制更新（mandatory）</span>
-    </label>
-    <div class="modal-actions">
-      <button class="ghost" data-close>取消</button>
-      <button id="notes-save" class="primary">保存</button>
-    </div>
-  </div>
-</div>
-
-<div id="modal-confirm" class="modal hidden">
-  <div class="modal-box">
-    <h3 id="confirm-title"></h3>
-    <p id="confirm-text"></p>
-    <div class="modal-actions">
-      <button class="ghost" data-close>取消</button>
-      <button id="confirm-ok" class="danger">确认</button>
-    </div>
-  </div>
-</div>
-
-<div id="toast" class="toast hidden"></div>
-
-<script src="app.js"></script>
+    <p id="message" role="status" aria-live="polite"></p>
+  </main>
+  <script src="/app.js"></script>
 </body>
 </html>

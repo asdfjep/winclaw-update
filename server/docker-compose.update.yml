@@ -19,8 +19,7 @@ services:
       - WINCLAW_UPDATE_BASE_URL=http://10.233.129.67:8091/update   # 写进清单的 url 前缀（8091）
       - WINCLAW_UPDATE_DIR=/data/winclaw-update
       - WINCLAW_ADMIN_PORT=8091
-      # 如需鉴权：设置非空 token（前端在控制台 localStorage.setItem('admin_token','<token>')）
-      - WINCLAW_ADMIN_TOKEN=
+      - WINCLAW_ADMIN_TOKEN=${WINCLAW_ADMIN_TOKEN:?Set a non-empty update admin token}
     restart: unless-stopped
 
   nginx:

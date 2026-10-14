@@ -5,4 +5,4 @@ WORKDIR /app
 COPY . /app
 
 EXPOSE 8091
-CMD ["node", "/app/server.js"]
+CMD ["node", "/app/winclaw2-server.js"]
