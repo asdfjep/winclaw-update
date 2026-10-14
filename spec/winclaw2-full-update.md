@@ -29,6 +29,7 @@
 ## 分发与失败
 
 - Nginx 仅公开 `public/winclaw2/releases/` 下完整 EXE，精确代理 `latest.yml` 到 Node，保留查询参数。清单 no-store，EXE immutable 长缓存，HEAD 和标准 Range 由 Nginx 承担。
+- `POST /api/v2/uploads` 必须原路径代理到 Node，不能因 Nginx 的尾斜杠补全发生 301 重定向；管理页分别显示创建会话、传输、服务端校验与登记阶段。
 - private 中的暂存、release 元数据、指针、审计及旧版归档不得被 HTTP 静态路径访问。
 - 上传不发布；断开、大小/哈希不符、空间不足不能形成 ready。失败暂存 24 小时后清理。一次上传会话只接收一次 PUT；complete 重试可幂等。
 - 发布与删除冲突必须保护 current、previous 及离开引用后至少 30 天的历史版本。首期删除只允许管理员显式执行。

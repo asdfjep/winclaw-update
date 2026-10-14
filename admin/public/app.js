@@ -108,6 +108,10 @@ function uploadBinary(id, file) {
         $('#upload-status').textContent = `${size(event.loaded)} / ${size(event.total)}`;
       }
     };
+    xhr.upload.onload = () => {
+      $('#upload-progress').removeAttribute('value');
+      $('#upload-status').textContent = '文件已传输，服务器正在完成 SHA512 校验…';
+    };
     xhr.onload = () => {
       let result = {};
       try { result = JSON.parse(xhr.responseText); } catch { /* handled below */ }
@@ -126,16 +130,25 @@ async function upload() {
     return message('文件名不符合完整安装包规范', true);
   const button = $('#upload');
   button.disabled = true;
+  $('#upload-progress').value = 0;
   $('#upload-progress').hidden = false;
+  $('#upload-status').textContent = '正在创建上传会话…';
   try {
     const meta = JSON.parse(await releaseFile.text());
     if (meta.file !== installer.name || meta.size !== installer.size) throw new Error('文件名或大小与 release.json 不一致');
     const session = await api('/api/v2/uploads', { method: 'POST', body: JSON.stringify(meta), headers: { 'Content-Type': 'application/json' } });
+    $('#upload-status').textContent = '正在传输完整安装包…';
     await uploadBinary(session.uploadId, installer);
+    $('#upload-progress').value = 100;
+    $('#upload-status').textContent = '校验完成，正在登记版本…';
     const complete = await api(`/api/v2/uploads/${session.uploadId}/complete`, { method: 'POST' });
     message(`${complete.releaseId} 已校验，可以选择通道发布`);
+    $('#upload-status').textContent = '已校验，可选择通道发布';
     await refresh();
-  } catch (error) { message(error.message, true); }
+  } catch (error) {
+    $('#upload-status').textContent = '上传或校验未完成';
+    message(error.message, true);
+  }
   finally { button.disabled = false; $('#upload-progress').hidden = true; }
 }
 refresh().catch((error) => message(error.message, true));
