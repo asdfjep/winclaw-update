@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 'use strict';
 
-// Single-writer WinClaw2 release service. Public installers are served by nginx.
+// Single-writer HoardSunAI release service. Public installers are served by nginx.
 const http = require('node:http');
 const fs = require('node:fs');
 const fsp = require('node:fs/promises');
@@ -360,7 +360,7 @@ async function main() {
   });
   server.requestTimeout = 60 * 60 * 1000;
   server.timeout = 10 * 60 * 1000;
-  server.listen(PORT, '0.0.0.0', () => console.log(`WinClaw2 update admin listening on ${PORT}`));
+  server.listen(PORT, '0.0.0.0', () => console.log(`HoardSunAI update admin listening on ${PORT}`));
 }
 if (require.main === module) main().catch((error) => { console.error(error); process.exitCode = 1; });
 module.exports = { validateRelease, manifestYaml, main };

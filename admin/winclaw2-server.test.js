@@ -63,12 +63,12 @@ async function upload(base, meta, bytes) {
 
 test('full installer is verified before preview and stable publication', async (t) => {
   const { base, root } = await startService(t);
-  const binary = Buffer.from('MZ WinClaw2 full installer fixture');
+  const binary = Buffer.from('MZ complete installer fixture');
   const meta = metadata('2.1.1', binary);
   assert.equal((await api(base, '/api/v2/releases')).status, 200);
   assert.equal((await api(base, '/api/v2/channels')).status, 200);
   const page = await (await fetch(base)).text();
-  assert.match(page, /WinClaw2 更新管理/);
+  assert.match(page, /HoardSunAI 更新管理/);
   assert.doesNotMatch(page, /login-form|管理 Token/);
   assert.equal((await api(base, '/api/v2/uploads', 'POST', { ...meta, packageType: 'delta' })).status, 400);
   assert.equal((await api(base, '/api/v2/uploads', 'POST', { ...meta, arch: 'arm64' })).status, 400);
