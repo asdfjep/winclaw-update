@@ -97,7 +97,9 @@ function validateRelease(raw) {
   if (raw.schemaVersion !== 1 || raw.product !== 'winclaw2' || raw.appId !== 'cn.hoardsun.winclaw2' ||
       typeof version !== 'string' || !VERSION_RE.test(version) || raw.platform !== 'windows' || raw.arch !== 'x64' ||
       raw.packageType !== 'nsis-full') bad(400, '产品、版本或平台不符合完整包契约');
-  if (raw.file !== `WinClaw-${version}-win-x64.exe` || !Number.isSafeInteger(raw.size) ||
+  const validInstallerName = raw.file === `HoardSunAI-${version}-win-x64.exe` ||
+    raw.file === `WinClaw-${version}-win-x64.exe`;
+  if (!validInstallerName || !Number.isSafeInteger(raw.size) ||
       raw.size < 1 || raw.size > MAX_UPLOAD || !SHA512_RE.test(raw.sha512 || '') ||
       Buffer.from(raw.sha512, 'base64').toString('base64') !== raw.sha512) bad(400, '安装包名称、大小或 SHA512 无效');
   if (!Number.isSafeInteger(raw.unpackedSize) || raw.unpackedSize < 1 ||
@@ -152,7 +154,8 @@ async function commitUpload(session) {
     const id = releaseId(session.meta.version);
     const existing = await readJsonFile(releaseMetaPath(id));
     if (existing) {
-      if (existing.sha512 !== session.meta.sha512 || existing.size !== session.meta.size) bad(409, '此版本已有不同内容');
+      if (existing.sha512 !== session.meta.sha512 || existing.size !== session.meta.size ||
+          existing.file !== session.meta.file) bad(409, '此版本已有不同内容或文件名');
       await fsp.rm(session.file, { force: true });
       session.state = 'complete';
       return { releaseId: id, status: 'ready', reused: true };

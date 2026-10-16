@@ -126,7 +126,7 @@ async function upload() {
   const releaseFile = $('#release-file').files[0];
   const installer = $('#installer-file').files[0];
   if (!releaseFile || !installer) return message('请选择 release.json 和完整 EXE', true);
-  if (releaseFile.name !== 'release.json' || !/^WinClaw-2\.\d+\.\d+-win-x64\.exe$/.test(installer.name))
+  if (releaseFile.name !== 'release.json' || !/^(?:HoardSunAI|WinClaw)-2\.\d+\.\d+-win-x64\.exe$/.test(installer.name))
     return message('文件名不符合完整安装包规范', true);
   const button = $('#upload');
   button.disabled = true;

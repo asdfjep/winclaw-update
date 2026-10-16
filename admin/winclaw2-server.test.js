@@ -44,10 +44,10 @@ async function api(base, route, method = 'GET', body) {
   body: body == null ? undefined : Buffer.isBuffer(body) ? body : JSON.stringify(body) });
   return { status: response.status, body: await response.json() };
 }
-function metadata(version, bytes) {
+function metadata(version, bytes, prefix = 'HoardSunAI') {
   return { schemaVersion: 1, product: 'winclaw2', appId: 'cn.hoardsun.winclaw2',
     version, platform: 'windows', arch: 'x64', packageType: 'nsis-full',
-    file: `WinClaw-${version}-win-x64.exe`, size: bytes.length,
+    file: `${prefix}-${version}-win-x64.exe`, size: bytes.length,
     sha512: crypto.createHash('sha512').update(bytes).digest('base64'),
     unpackedSize: 12345, buildCommit: 'a'.repeat(40), builtAt: '2026-10-14T00:00:00.000Z',
     releaseNotes: `Full update ${version}` };
@@ -72,8 +72,13 @@ test('full installer is verified before preview and stable publication', async (
   assert.doesNotMatch(page, /login-form|管理 Token/);
   assert.equal((await api(base, '/api/v2/uploads', 'POST', { ...meta, packageType: 'delta' })).status, 400);
   assert.equal((await api(base, '/api/v2/uploads', 'POST', { ...meta, arch: 'arm64' })).status, 400);
+  assert.equal((await api(base, '/api/v2/uploads', 'POST',
+    { ...meta, file: 'HoardSunAI-2.1.2-win-x64.exe' })).status, 400);
+  assert.equal((await api(base, '/api/v2/uploads', 'POST',
+    { ...meta, file: '../HoardSunAI-2.1.1-win-x64.exe' })).status, 400);
   assert.equal((await upload(base, meta, binary)).status, 200);
   assert.equal((await upload(base, meta, binary)).body.reused, true);
+  assert.equal((await upload(base, metadata('2.1.1', binary, 'WinClaw'), binary)).status, 409);
   const altered = Buffer.from('MZ another complete installer');
   assert.equal((await upload(base, metadata('2.1.1', altered), altered)).status, 409);
   let channels = (await api(base, '/api/v2/channels')).body;
@@ -115,9 +120,9 @@ test('partial upload never becomes ready and restore requires previous release',
 
 test('channel restore does not downgrade an installer and protects recent assets', async (t) => {
   const { base } = await startService(t);
-  for (const version of ['2.1.1', '2.1.2']) {
+  for (const [version, prefix] of [['2.1.1', 'WinClaw'], ['2.1.2', 'HoardSunAI']]) {
     const bytes = Buffer.from(`MZ ${version} complete installer`);
-    assert.equal((await upload(base, metadata(version, bytes), bytes)).status, 200);
+    assert.equal((await upload(base, metadata(version, bytes, prefix), bytes)).status, 200);
   }
   assert.equal((await api(base, '/api/v2/channels/preview/publish', 'POST',
     { releaseId: '2.1.1-windows-x64', expectedRevision: 0 })).status, 200);
@@ -128,8 +133,31 @@ test('channel restore does not downgrade an installer and protects recent assets
   assert.equal(reverted.body.releaseId, '2.1.1-windows-x64');
   assert.equal((await api(base, '/api/v2/releases/2.1.2-windows-x64', 'DELETE')).status, 409);
   const feed = await fetch(`${base}/update/winclaw2/latest.yml?channel=3`);
-  assert.match(await feed.text(), /version: "2\.1\.1"/);
+  const yaml = await feed.text();
+  assert.match(yaml, /version: "2\.1\.1"/);
+  assert.ok(yaml.includes(`${base}/update/winclaw2/releases/2.1.1-windows-x64/WinClaw-2.1.1-win-x64.exe`));
   assert.equal((await fetch(`${base}/update/winclaw2/latest.yml?channel=3&platform=darwin-arm64`)).status, 400);
+});
+
+test('startup preserves a historical WinClaw release and its manifest URL', async (t) => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), 'winclaw2-update-legacy-'));
+  const bytes = Buffer.from('MZ historical ready installer');
+  const meta = metadata('2.1.3', bytes, 'WinClaw');
+  const publicDir = path.join(root, 'public', 'winclaw2', 'releases', '2.1.3-windows-x64');
+  const privateDir = path.join(root, 'private');
+  await fs.mkdir(publicDir, { recursive: true });
+  await fs.mkdir(path.join(privateDir, 'releases'), { recursive: true });
+  await fs.mkdir(path.join(privateDir, 'channels'), { recursive: true });
+  await fs.writeFile(path.join(publicDir, meta.file), bytes);
+  await fs.writeFile(path.join(privateDir, 'releases', '2.1.3-windows-x64.json'), JSON.stringify(meta));
+  await fs.writeFile(path.join(privateDir, 'channels', 'stable.json'), JSON.stringify({
+    revision: 1, releaseId: '2.1.3-windows-x64', previousReleaseId: null,
+    publishedAt: '2026-10-14T00:00:00.000Z',
+  }));
+  const { base } = await startService(t, root);
+  const feed = await fetch(`${base}/update/winclaw2/latest.yml?channel=1`);
+  assert.equal(feed.status, 200);
+  assert.ok((await feed.text()).includes(`${base}/update/winclaw2/releases/2.1.3-windows-x64/${meta.file}`));
 });
 
 test('startup repairs read permission on an existing ready installer', { skip: process.platform === 'win32' }, async (t) => {

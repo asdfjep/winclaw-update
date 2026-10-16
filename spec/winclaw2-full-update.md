@@ -5,8 +5,9 @@
 ## 发布事实
 
 - 不可变 release：`schemaVersion=1`、`product=winclaw2`、`appId=cn.hoardsun.winclaw2`、`version=2.x.y`、`platform=windows`、`arch=x64`、`packageType=nsis-full`、EXE 文件名、size、sha512（Base64）、unpackedSize、buildCommit、builtAt、releaseNotes。`releaseId=<version>-windows-x64`。
+- 新安装包文件名为 `HoardSunAI-<version>-win-x64.exe`；服务继续识别已登记的 `WinClaw-<version>-win-x64.exe`，使历史版本在启动、下载及通道撤回时保持可用。文件名前缀不改变 `product`、`appId`、releaseId 或更新 URL 路径。
 - 当前通道唯一事实：`private/channels/{stable|preview}.json`，包含 `revision`、`releaseId`、`previousReleaseId`、`publishedAt`。release 元数据和 EXE 不可变，YAML 只从两者生成。
-- 同版同内容重复提交是幂等操作；同版不同 hash 返回 409。release 不含 channel，因此同一文件可从 preview 提升 stable。
+- 同版同内容、同文件名重复提交是幂等操作；同版不同 hash 或文件名返回 409。release 不含 channel，因此同一文件可从 preview 提升 stable。
 - 写操作由单一 admin 进程串行提交。先持久化 EXE，最后提交 ready 元数据；仅 ready release 可发布。通道指针用同目录临时文件、fsync 与 rename 原子替换。发布、撤回都递增 revision；CAS 不符返回 409。
 
 ## API
