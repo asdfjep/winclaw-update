@@ -1,8 +1,8 @@
-# WinClaw2 全量自动更新服务
+# HoardSunAI 全量自动更新服务
 
-本仓库向正式版 WinClaw2 分发 **Windows x64 完整 NSIS 安装器**。预览与正式是同一产品的两个投放通道；独立安装的 WinClaw Preview 不通过本服务自动更新。
+本仓库向正式版 HoardSunAI 分发 **Windows x64 完整 NSIS 安装器**。预览与正式是同一产品的两个投放通道；独立安装的 WinClaw Preview 不通过本服务自动更新。
 
-服务仍使用离线可构建的 Node 22 管理端、Nginx 静态分发和端口 `8091`。详细协议见 [WinClaw2 全量更新服务契约](spec/winclaw2-full-update.md)；发布规范见 [发布包打包规范](spec/发布包打包规范.md)。
+服务仍使用离线可构建的 Node 22 管理端、Nginx 静态分发和端口 `8091`。详细协议见 [HoardSunAI 全量更新服务契约](spec/winclaw2-full-update.md)；发布规范见 [发布包打包规范](spec/发布包打包规范.md)。
 
 ```text
 客户端 ── GET /update/winclaw2/latest.yml?platform=windows-x86_64&channel=1|3
@@ -14,4 +14,4 @@
 
 管理页面打开后直接显示发布工作区，管理 API 不要求 Token。能访问 `8091` 的客户端都能操作发布，请在网络边界仅允许可信设备访问该端口。清单由通道指针即时生成，完整 EXE 由 Nginx 提供。私有指针、上传暂存和审计文件不在可下载目录内。
 
-部署与迁移步骤见 [DEPLOY.md](server/DEPLOY.md)。本仓库原有的 WinClaw 1.x 代码已从活跃服务移除；迁移前先备份原命名卷，不把旧版安装包转发给 WinClaw2 客户端。
+部署与迁移步骤见 [DEPLOY.md](server/DEPLOY.md)。本仓库原有的 WinClaw 1.x 代码已从活跃服务移除；迁移前先备份原命名卷，不把旧版安装包转发给 HoardSunAI 客户端。

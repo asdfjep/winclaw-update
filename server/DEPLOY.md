@@ -1,10 +1,10 @@
-# WinClaw2 更新服务部署与迁移
+# HoardSunAI 更新服务部署与迁移
 
 更新服务与知识库分离，对外使用 `8091`。部署由管理员在目标服务器执行；开发和测试不执行发布或上传。
 
 ## 上线前备份
 
-先确认现有 `server_winclaw-update` 命名卷及旧版当前清单，完整备份该卷和当前 Compose 配置。旧 WinClaw 1.x 的清单、安装包、运行包及元数据只做离线归档；新 Nginx 配置不再对外提供旧版更新 URL，也不会把旧安装包重定向到 WinClaw2。
+先确认现有 `server_winclaw-update` 命名卷及旧版当前清单，完整备份该卷和当前 Compose 配置。旧 WinClaw 1.x 的清单、安装包、运行包及元数据只做离线归档；新 Nginx 配置不再对外提供旧版更新 URL，也不会把旧安装包重定向到 HoardSunAI。
 
 目标服务器使用 snap Docker，保留固定命名卷名 `server_winclaw-update`；`node:22-alpine` 与 `nginx:alpine` 镜像应已在本地缓存。管理页面和 API 不要求 Token，因此必须在网络边界将 `8091` 限制到可信设备。
 
